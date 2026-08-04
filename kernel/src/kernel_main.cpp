@@ -40,7 +40,8 @@ static void hcf(void) {
 // The following will be our kernel's entry point.
 // If renaming kernel_main() to something else, make sure to change the
 // linker script accordingly.
-void kernel_main(void) {
+extern "C" void kernel_main(void) {
+
     // Ensure the bootloader actually understands our base revision (see spec).
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
         hcf();
@@ -57,7 +58,7 @@ void kernel_main(void) {
 
     // Print a nice pattern to screen as an example.
     // Note: we assume the framebuffer model is RGB with 32-bit pixels.
-    volatile uint32_t *fb_ptr = framebuffer->address;
+    volatile uint32_t *fb_ptr = (volatile uint32_t *)framebuffer->address;
     for (size_t y = 0; y < framebuffer->height; y++) {
         for (size_t x = 0; x < framebuffer->width; x++) {
             uint32_t nX = x * 255 / framebuffer->width;

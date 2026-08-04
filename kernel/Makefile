@@ -74,6 +74,8 @@ override CXXFLAGS += \
     -fno-PIC \
     -ffunction-sections \
     -fdata-sections \
+    -fno-exceptions \
+    -fno-rtti \
     -m64 \
     -march=x86-64 \
     -mabi=sysv \
@@ -87,8 +89,8 @@ override CXXFLAGS += \
 # Internal C++ preprocessor flags that should not be changed by the user.
 override CPPFLAGS := \
     -I src/include \
-    -I build/limine-protocol/include \
-    -isystem build/freestanding-c-hdrs/include \
+    -I _limine-protocol/include \
+    -isystem _freestanding-c-hdrs/include \
     $(CPPFLAGS) \
     -MMD \
     -MP
@@ -111,11 +113,11 @@ override LDFLAGS += \
 # Use "find" to glob all *.c, *.S, and *.asm files in the tree and obtain the
 # object and header dependency file names.
 override SRCFILES := $(shell find -L src cc-runtime/src -type f 2>/dev/null | LC_ALL=C sort)
-override CFILES := $(filter %.cpp,$(SRCFILES))
+override CXXFILES := $(filter %.cpp,$(SRCFILES))
 override ASFILES := $(filter %.S,$(SRCFILES))
 override NASMFILES := $(filter %.asm,$(SRCFILES))
-override OBJ := $(addprefix build/obj/,$(CFILES:.cpp=.cpp.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
-override HEADER_DEPS := $(addprefix build/obj/,$(CFILES:.cpp=.cpp.d) $(ASFILES:.S=.S.d))
+override OBJ := $(addprefix build/obj/,$(CXXFILES:.cpp=.cpp.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
+override HEADER_DEPS := $(addprefix build/obj/,$(CXXFILES:.cpp=.cpp.d) $(ASFILES:.S=.S.d))
 
 # Default target. This must come first, before header dependencies.
 .PHONY: all
@@ -152,7 +154,7 @@ clean:
 # Remove everything built and generated including downloaded dependencies.
 .PHONY: distclean
 distclean: clean
-	rm -rf .deps-obtained .cache compile_commands.json freestanding-c-hdrs cc-runtime limine-protocol
+	rm -rf .deps-obtained .cache compile_commands.json _freestanding-c-hdrs _cc-runtime _limine-protocol
 
 # Install the final built executable to its final on-root location.
 .PHONY: install

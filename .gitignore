@@ -1,4 +1,9 @@
-/src/.deps-obtained
+/kernel/.deps-obtained
+/kernel/_cc-runtime
+/kernel/_limine-protocol
+/kernel/_freestanding-c-hdrs
+/limine-binary
+/edk2-ovmf-bins
 /build
 *.iso
 *.hdd

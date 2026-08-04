@@ -13,6 +13,8 @@ HOST_CPPFLAGS :=
 HOST_LDFLAGS :=
 HOST_LIBS :=
 
+#
+
 .PHONY: all
 all: $(IMAGE_NAME).iso
 
@@ -25,15 +27,17 @@ run: $(IMAGE_NAME).iso
 		-M q35 \
 		-cdrom $(IMAGE_NAME).iso \
 		-boot d \
+		-display default \
 		$(QEMUFLAGS)
 
 .PHONY: run-uefi
-run-uefi: build/edk2-ovmf-bins $(IMAGE_NAME).iso
+run-uefi: edk2-ovmf-bins $(IMAGE_NAME).iso
 	qemu-system-x86_64 \
 		-M q35 \
 		-drive if=pflash,unit=0,format=raw,file=edk2-ovmf-bins/ovmf-code-x86_64.fd,readonly=on \
 		-cdrom $(IMAGE_NAME).iso \
 		-boot d \
+		-display default \
 		$(QEMUFLAGS)
 
 .PHONY: run-hdd
@@ -41,71 +45,74 @@ run-hdd: $(IMAGE_NAME).hdd
 	qemu-system-x86_64 \
 		-M q35 \
 		-hda $(IMAGE_NAME).hdd \
+		-display default \
 		$(QEMUFLAGS)
 
 .PHONY: run-hdd-uefi
-run-hdd-uefi: build/edk2-ovmf-bins $(IMAGE_NAME).hdd
+run-hdd-uefi: edk2-ovmf-bins $(IMAGE_NAME).hdd
 	qemu-system-x86_64 \
 		-M q35 \
 		-drive if=pflash,unit=0,format=raw,file=edk2-ovmf-bins/ovmf-code-x86_64.fd,readonly=on \
 		-hda $(IMAGE_NAME).hdd \
+		-display sdl \
 		$(QEMUFLAGS)
 
-build/edk2-ovmf-bins:
+edk2-ovmf-bins:
 	curl -L https://github.com/osdev0/edk2-ovmf-stable-bins/releases/latest/download/edk2-ovmf-bins.tar.gz | gunzip | tar -xf -
 
-build/limine-binary/limine:
-	rm -rf build/limine-binary
+limine-binary/limine:
+	#rm -rf limine-binary
 	curl -L https://github.com/Limine-Bootloader/Limine/releases/latest/download/limine-binary.tar.gz | gunzip | tar -xf -
-	$(MAKE) -C build/limine-binary \
+	
+	$(MAKE) -C limine-binary \
 		CC="$(HOST_CC)" \
 		CFLAGS="$(HOST_CFLAGS)" \
 		CPPFLAGS="$(HOST_CPPFLAGS)" \
 		LDFLAGS="$(HOST_LDFLAGS)" \
 		LIBS="$(HOST_LIBS)"
 
-src/.deps-obtained:
-	./src/get-deps
+kernel/.deps-obtained:
+	./kernel/get-deps
 
 .PHONY: kernel
-kernel: src/.deps-obtained
-	$(MAKE) -C src
+kernel: kernel/.deps-obtained
+	$(MAKE) -C kernel
 
-$(IMAGE_NAME).iso: build/limine-binary/limine kernel
+$(IMAGE_NAME).iso: limine-binary/limine kernel
 	rm -rf build/iso_root
 	mkdir -p build/iso_root/boot
-	cp -v build/bin/kernel build/iso_root/boot/
+	cp -v kernel/build/bin/kernel build/iso_root/boot/
 	mkdir -p build/iso_root/boot/limine
-	cp -v limine.conf build/limine-binary/limine-bios.sys build/limine-binary/limine-bios-cd.bin build/limine-binary/limine-uefi-cd.bin build/iso_root/boot/limine/
+	cp -v kernel/limine.conf limine-binary/limine-bios.sys limine-binary/limine-bios-cd.bin limine-binary/limine-uefi-cd.bin build/iso_root/boot/limine/
 	mkdir -p build/iso_root/EFI/BOOT
-	cp -v build/limine-binary/BOOTX64.EFI build/iso_root/EFI/BOOT/
-	cp -v build/limine-binary/BOOTIA32.EFI build/iso_root/EFI/BOOT/
+	cp -v limine-binary/BOOTX64.EFI build/iso_root/EFI/BOOT/
+	cp -v limine-binary/BOOTIA32.EFI build/iso_root/EFI/BOOT/
 	xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
 		-apm-block-size 2048 --efi-boot boot/limine/limine-uefi-cd.bin \
 		-efi-boot-part --efi-boot-image --protective-msdos-label \
 		build/iso_root -o $(IMAGE_NAME).iso
-	./build/limine-binary/limine bios-install $(IMAGE_NAME).iso
-	rm -rf build/iso_root
+	./limine-binary/limine bios-install $(IMAGE_NAME).iso
+	
 
-$(IMAGE_NAME).hdd: build/limine-binary/limine kernel
+$(IMAGE_NAME).hdd: limine-binary/limine kernel
 	rm -f $(IMAGE_NAME).hdd
 	dd if=/dev/zero bs=1M count=0 seek=64 of=$(IMAGE_NAME).hdd
 	PATH=$$PATH:/usr/sbin:/sbin sgdisk $(IMAGE_NAME).hdd -n 1:2048 -t 1:ef00 -m 1
-	./build/limine-binary/limine bios-install $(IMAGE_NAME).hdd
+	./limine-binary/limine bios-install $(IMAGE_NAME).hdd
 	mformat -i $(IMAGE_NAME).hdd@@1M
 	mmd -i $(IMAGE_NAME).hdd@@1M ::/EFI ::/EFI/BOOT ::/boot ::/boot/limine
-	mcopy -i $(IMAGE_NAME).hdd@@1M src/bin/kernel ::/boot
-	mcopy -i $(IMAGE_NAME).hdd@@1M limine.conf build/limine-binary/limine-bios.sys ::/boot/limine
-	mcopy -i $(IMAGE_NAME).hdd@@1M build/limine-binary/BOOTX64.EFI ::/EFI/BOOT
-	mcopy -i $(IMAGE_NAME).hdd@@1M build/limine-binary/BOOTIA32.EFI ::/EFI/BOOT
+	mcopy -i $(IMAGE_NAME).hdd@@1M kernel/build/bin/kernel ::/boot
+	mcopy -i $(IMAGE_NAME).hdd@@1M kernel/limine.conf limine-binary/limine-bios.sys ::/boot/limine
+	mcopy -i $(IMAGE_NAME).hdd@@1M limine-binary/BOOTX64.EFI ::/EFI/BOOT
+	mcopy -i $(IMAGE_NAME).hdd@@1M limine-binary/BOOTIA32.EFI ::/EFI/BOOT
 
 .PHONY: clean
 clean:
-	$(MAKE) -C src clean
+	$(MAKE) -C kernel clean
 	rm -rf build/iso_root $(IMAGE_NAME).iso $(IMAGE_NAME).hdd
 
 .PHONY: distclean
 distclean: clean
-	$(MAKE) -C src distclean
-	rm -rf build/limine-binary build/edk2-ovmf-bins
+	$(MAKE) -C kernel distclean
+	rm -rf limine-binary edk2-ovmf-bins
