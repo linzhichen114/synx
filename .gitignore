@@ -5,6 +5,7 @@
 /limine-binary
 /edk2-ovmf-bins
 /build
+/kernel/build
 /.vscode
 .DS_Store
 *.iso
