@@ -3,6 +3,10 @@
 #include <stdbool.h>
 #include <limine.h>
 
+#include "ostreamk.h"
+
+ostreamk_init;
+
 // Set the base revision to 6, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
 // See specification for further info.
@@ -16,7 +20,7 @@ static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(6);
 // once or marked as used with the "used" attribute as done here.
 
 __attribute__((used, section(".limine_requests")))
-static volatile struct limine_framebuffer_request framebuffer_request = {
+volatile struct limine_framebuffer_request framebuffer_request = {
     .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
     .revision = 0
 };
@@ -53,7 +57,7 @@ extern "C" void kernel_main(void) {
         hcf();
     }
 
-    // Fetch the first framebuffer.
+    /*// Fetch the first framebuffer.
     struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
 
     // Print a nice pattern to screen as an example.
@@ -65,8 +69,10 @@ extern "C" void kernel_main(void) {
             uint32_t nY = y * 255 / framebuffer->height;
             fb_ptr[y * (framebuffer->pitch / 4) + x] = (nY << 8) | nX;
         }
-    }
-
+    }*/
+    
+    kout.write("Hello, world by write()!\n");
+    kout << "Hello, world by operator<<!" << endl;
     // We're done, just hang...
     hcf();
 }

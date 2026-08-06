@@ -112,8 +112,8 @@ override LDFLAGS += \
 
 # Use "find" to glob all *.c, *.S, and *.asm files in the tree and obtain the
 # object and header dependency file names.
-override SRCFILES := $(shell find -L kernel/src cc-runtime/src -type f 2>/dev/null | LC_ALL=C sort)
-override CXXFILES := $(filter %.cpp,$(SRCFILES))
+override SRCFILES := $(shell find -L kernel/src kernel/_cc-runtime/src -type f 2>/dev/null | LC_ALL=C sort)
+override CXXFILES := $(shell find -L $(CURDIR)/src $(CURDIR)/cc-runtime/src -type f -name "*.cpp" 2>/dev/null | LC_ALL=C sort)
 override ASFILES := $(filter %.S,$(SRCFILES))
 override NASMFILES := $(filter %.asm,$(SRCFILES))
 override OBJ := $(addprefix build/obj/,$(CXXFILES:.cpp=.cpp.o) $(ASFILES:.S=.S.o) $(NASMFILES:.asm=.asm.o))
@@ -127,9 +127,9 @@ all: build/bin/$(OUTPUT)
 -include $(HEADER_DEPS)
 
 # Link rules for the final executable.
-build/bin/$(OUTPUT): Makefile linker-scripts/x86_64.lds $(OBJ)
-	mkdir -p "$(dir $@)"
-	$(LD) $(LDFLAGS) $(OBJ) -o $@
+# build/bin/$(OUTPUT): Makefile linker-scripts/x86_64.lds $(OBJ) 
+# 	mkdir -p "$(dir $@)"
+# 	$(LD) $(LDFLAGS) build/obj/$(CXXFILES) -o $@
 
 # Compilation rules for *.cpp files.
 build/obj/%.cpp.o: %.cpp Makefile
@@ -145,6 +145,10 @@ build/obj/%.S.o: %.S Makefile
 build/obj/%.asm.o: %.asm Makefile
 	mkdir -p "$(dir $@)"
 	nasm $(NASMFLAGS) $< -o $@
+
+build/bin/$(OUTPUT): Makefile linker-scripts/x86_64.lds $(OBJ)
+	mkdir -p build/obj build/bin #"$(dir $@)"
+	$(LD) $(LDFLAGS) $(OBJ) -o $@
 
 # Remove object files and the final executable.
 .PHONY: clean
