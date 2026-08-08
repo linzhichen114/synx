@@ -1,11 +1,14 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+extern "C" {
 #include <limine.h>
-
+// };
+}
 #include "ostreamk.h"
 
-ostreamk_init;
+
+
 
 // Set the base revision to 6, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
@@ -70,7 +73,7 @@ extern "C" void kernel_main(void) {
             fb_ptr[y * (framebuffer->pitch / 4) + x] = (nY << 8) | nX;
         }
     }*/
-    
+    ostreamk kout;
     kout.write("Hello, world by write()!\n");
     kout << "Hello, world by operator<<!" << endl;
     // We're done, just hang...
