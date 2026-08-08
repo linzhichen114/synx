@@ -1,12 +1,4 @@
-/kernel/.deps-obtained
-/kernel/_cc-runtime
-/kernel/_limine-protocol
-/kernel/_freestanding-c-hdrs
-/limine-binary
-/edk2-ovmf-bins
 /build
-/kernel/build
 /.vscode
 .DS_Store
 *.iso
-*.hdd
