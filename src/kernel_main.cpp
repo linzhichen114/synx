@@ -82,12 +82,12 @@ extern "C" void kernel_main(void) {
     kout << "fb0: Color mode: ARGB" << endl;
     const ARGBColor_t fg_col = HexToARGB(FG_COLOR);
     const ARGBColor_t bg_col = HexToARGB(BG_COLOR);
-    (kout << "fb0: Frontground color: ARGB [ A: " << fg_col.a << " R:" << fg_col.r << " G:" << fg_col.g<< " B:" << fg_col.b << " ], HEX ").writeHex_uint32(FG_COLOR);
+    (kout << "fb0: Frontground color: ARGB [ A: " << fg_col.a << " R: " << fg_col.r << " G: " << fg_col.g<< " B: " << fg_col.b << " ], HEX ").writeHex_uint16(FG_COLOR);
     kout << endl;
-    (kout << "fb0: Background color: ARGB [ A: " << bg_col.a << " R:" << bg_col.r << " G:" << bg_col.g<< " B:" << bg_col.b << " ], HEX ").writeHex_uint32(BG_COLOR);
+    (kout << "fb0: Background color: ARGB [ A: " << bg_col.a << " R: " << bg_col.r << " G: " << bg_col.g<< " B: " << bg_col.b << " ], HEX ").writeHex_uint16(BG_COLOR);
     kout << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters.\n" << endl;
 
-    kernel_panic("kernel_main: next function is not implemented yet - system halting.");
+    kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

@@ -132,6 +132,14 @@ void ostreamk::writeHex_uint32(uint32_t val) {
     }
 }
 
+void ostreamk::writeHex_uint16(uint16_t val) {
+    const char hex_chars[] = "0123456789abcdef";
+    *this << "0x";
+    for (int i = 30; i >= 0; i -= 4) {
+        this->write(hex_chars[(val >> i) & 0xF]);
+    }
+}
+
 // ============================================================
 // 数值转字符串辅助函数 (避免依赖 libc)
 // ============================================================

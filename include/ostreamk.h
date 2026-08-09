@@ -41,6 +41,7 @@ public:
     void write(const char c);
     void write(const char* str);
     void writeHex_uint32(uint32_t val);
+    void writeHex_uint16(uint16_t val);
     friend ostreamk& operator<<(ostreamk& os, const char*     s); 
     friend ostreamk& operator<<(ostreamk& os, const uint8_t   v);  
     friend ostreamk& operator<<(ostreamk& os, const uint16_t  v);  
