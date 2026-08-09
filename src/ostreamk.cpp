@@ -3,21 +3,13 @@
 #include <limine.h>
 #include <stddef.h>
 
-// ============================================================
-// 外部依赖声明 (由 kernel_main 所在文件提供)
-// ============================================================
+
 extern volatile struct limine_framebuffer_request framebuffer_request;
 
 // ============================================================
 // 模块内部状态与辅助宏
 // ============================================================
 namespace {
-    // 默认字体参数 (8x16 是标准 VGA/BIOS 字体尺寸)
-    constexpr uint32_t FONT_WIDTH  = 8;
-    constexpr uint32_t FONT_HEIGHT = 16;
-    constexpr uint32_t FG_COLOR    = 0x00FFFFFF; // 白色前景 (ARGB)
-    constexpr uint32_t BG_COLOR    = 0x00000000; // 黑色背景 (ARGB)
-
     // 全局光标状态
     size_t cursor_x = 0;
     size_t cursor_y = 0;
@@ -25,7 +17,7 @@ namespace {
     size_t max_rows = 0;
 
     // 获取当前有效的 framebuffer 指针
-    inline volatile uint32_t* get_fb() {
+    inline volatile uint32_t* getframebuffer() {
         if (!framebuffer_request.response || 
             framebuffer_request.response->framebuffer_count < 1) {
             return nullptr;
@@ -50,14 +42,13 @@ namespace {
     }
 
     // 绘制单个字符到 framebuffer
-    void draw_char(char c, size_t x, size_t y) {
-        volatile uint32_t* fb = get_fb();
+    void drawChar(char c, size_t x, size_t y) {
+        volatile uint32_t* fb = getframebuffer();
         if (!fb) return;
 
         auto* fb_info = framebuffer_request.response->framebuffers[0];
         size_t row_stride = fb_info->pitch / sizeof(uint32_t);
 
-        // 【核心修复】：直接使用字符的 ASCII 码作为索引，绝对不要减 0x20！
         uint8_t glyph_index = (uint8_t)c;
 
         // 安全边界检查：防止越界读取导致 QEMU 崩溃
@@ -111,7 +102,7 @@ void ostreamk::write(const uint8_t c) {
         return;
     }
 
-    draw_char(c, cursor_x, cursor_y);
+    drawChar(c, cursor_x, cursor_y);
     cursor_x++;
     if (cursor_x >= max_cols) {
         newline();
@@ -131,6 +122,14 @@ void ostreamk::write(const char c) {
 
 void ostreamk::write(const char* str) {
     write((const uint8_t*)(str));
+}
+
+void ostreamk::writeHex_uint32(uint32_t val) {
+    const char hex_chars[] = "0123456789abcdef";
+    *this << "0x";
+    for (int i = 60; i >= 0; i -= 4) {
+        this->write(hex_chars[(val >> i) & 0xF]);
+    }
 }
 
 // ============================================================
@@ -174,7 +173,7 @@ namespace {
         // 简化做法：直接从高位写
         for (int i = 0; i < 16; i++) {
             uint8_t nibble = (val >> (60 - i * 4)) & 0xF;
-            buf[2 + i] = nibble < 10 ? ('0' + nibble) : ('A' + nibble - 10);
+            buf[2 + i] = nibble < 10 ? ('0' + nibble) : ('a' + nibble - 10);
         }
         len = 18; // "0x" + 16 hex digits
     }
@@ -238,12 +237,10 @@ ostreamk& operator<<(ostreamk& os, const uint64_t* p) {
     return os;
 }
 
-ostreamk& operator<<(ostreamk& os, const void* p) {
-    char buf[20]; int len;
-    ptr_to_str(p, buf, len);
-    for (int i = 0; i < len; i++) os.write(buf[i]);
-    return os;
-}
+// ostreamk& operator<<(ostreamk& os, const void* p) {
+//     os.writeHex_uint32((uint32_t)(p));
+//     return os;
+// }
 
 ostreamk& operator<<(ostreamk& os, const char* s) {
     os.write(s);

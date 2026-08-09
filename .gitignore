@@ -1,4 +1,5 @@
 /build
+/assets/limine-bootloader/limine
 /.vscode
 .DS_Store
 *.iso

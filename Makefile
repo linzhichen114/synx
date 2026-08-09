@@ -120,3 +120,4 @@ run: all
 .PHONY: clean
 clean:
 	rm -rf build/*
+	make -C assets/limine-bootloader clean
