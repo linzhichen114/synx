@@ -6,6 +6,7 @@ extern "C" {
 }
 #include "ostreamk.h"
 #include "sysdef.h"
+#include "gdt.h"
 
 
 
@@ -87,7 +88,7 @@ extern "C" void kernel_main(void) {
     (kout << "fb0: Background color: ARGB [ A: " << bg_col.a << " R: " << bg_col.r << " G: " << bg_col.g<< " B: " << bg_col.b << " ], HEX ").writeHex_uint16(BG_COLOR);
     kout << endl;
     kout << "fbcon: fb0 is primary device." << endl;
-    kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters.\n" << endl;
-
+    kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
+    gdtInit();
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }
