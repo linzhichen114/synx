@@ -2,10 +2,10 @@
 #include "ostreamk.h"
 #include <memory.h>
 
-
-static GDTEntry gdt[3];
+static uint64_t _kernel_stack_top;
+static GDTEntry gdt[7];
 static GDTPtr   gp;
-// static TSSEntry tss alignas(4096);
+static TSSEntry tss;
 
 void loadGdt() {
     __asm__ volatile (
@@ -29,15 +29,55 @@ void loadGdt() {
 
 void loadTss() {
     __asm__ volatile (
-        "mov $0x28, %%ax\n"
+        "mov $0x28, %%rax\n"
         "ltr %%ax\n"
+        : 
+        : 
+        : "rax", "memory"
     );
+}
+
+void tssInit(uint64_t kStackTop) {
+    ostreamk kout;
+    kout << "gdt: Creating TSS Descriptor (Kernel Stack Top: " << &kStackTop << ") :" << endl;
+
+    // 1. 将 TSS 清零
+    memset(&tss, 0, sizeof(struct TSSEntry));
+
+    // 2. 设置 Ring 0 栈指针
+    kout << "gdt:   Setting RSP0..." << endl;
+    tss.rsp0 = kStackTop;
+
+    // 3. 设置 I/O 权限位图基址
+    kout << "gdt:   Setting I/O Permission Bitmap Base Address..." << endl;
+    tss.iopbBase = sizeof(struct TSSEntry);
+
+    uint64_t tss_base = (uint64_t) &tss;
+    uint32_t limit    = sizeof(struct TSSEntry) - 1; // 103
+
+    // 低 8 字节描述符（索引 5）
+    kout << "gdt:   Writing Low 8 Bytes Descriptor (Index 5)..." << endl;
+    gdt[5].limit_low = limit & 0xFFFF;
+    gdt[5].base_low = tss_base & 0xFFFF;
+    gdt[5].base_middle = (tss_base >> 16) & 0xFF;
+    gdt[5].access = 0x89;      // Present=1, DPL=0, S=0, Type=1001 (Available 64-bit TSS)
+    gdt[5].granularity = ((limit >> 16) & 0x0F) | ((tss_base >> 24) & 0xFF);
+
+    // 高 8 字节描述符（索引 6）
+    kout << "gdt:   Writing High 8 Bytes Descriptor (Index 6)..." << endl;
+    gdt[6].limit_low = (tss_base >> 32) & 0xFFFF;
+    gdt[6].base_low = (tss_base >> 48) & 0xFFFF;
+    gdt[6].base_middle = 0;
+    gdt[6].access = 0;
+    gdt[6].granularity = 0;
+
+    kout << "All Done." << endl;
 }
 
 void gdtInit() {
     ostreamk kout;
 
-    kout << "gdt: Initlizing..." << endl;
+    kout << "gdt: Initlizing GDT & TSS..." << endl;
 
     // null descriptor
     kout << "gdt: Creating null descriptor... ";
@@ -90,12 +130,18 @@ void gdtInit() {
     kout << "done" << endl;
 
     // TSS descriptor
-    // kout << "gdt: Creating TSS Descriptor:" << endl;
+    tssInit((uint64_t)&_kernel_stack_top);
 
-    // load GDT
-    kout << "gdt: Loading GDT..." << endl;
+    // load GDT & TSS
+    kout << "gdt: Loading GDT...";
     gp.limit = sizeof(gdt) - 1;
     gp.base = (uint64_t)&gdt;
     loadGdt();
+    kout << "done" << endl;
+    kout << "gdt: Loading TSS...";
+    loadTss();
+    kout << "done" << endl;
+
+    kout << "gdt: Sussessfully initlized GDT & TSS." << endl;
 
 }
