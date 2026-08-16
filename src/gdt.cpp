@@ -71,7 +71,7 @@ void tssInit(uint64_t kStackTop) {
     gdt[6].access = 0;
     gdt[6].granularity = 0;
 
-    kout << "All Done." << endl;
+    kout << "gdt: - All Done." << endl;
 }
 
 void gdtInit() {

@@ -29,6 +29,12 @@ volatile struct limine_framebuffer_request framebuffer_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_executable_cmdline_request executable_cmdline_request = {
+    .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
+    .revision = 0
+};
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .cpp file, as seen fit.
 
@@ -89,6 +95,7 @@ extern "C" void kernel_main(void) {
     kout << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
+    kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
     gdtInit();
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }
