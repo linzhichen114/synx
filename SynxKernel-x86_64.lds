@@ -57,6 +57,17 @@ SECTIONS
         *(.data .data.*)
     } :data
 
+    /* kallsyms symbols table */
+    .kallsyms : ALIGN(8) {
+        __symtab_start = .;
+        KEEP(*(.kallsyms_symtab))
+        __symtab_end = .;
+        
+        __strtab_start = .;
+        KEEP(*(.kallsyms_strtab))
+        __strtab_end = .;
+    }
+
     /* NOTE: .bss needs to be the last thing mapped to :data, otherwise lots of */
     /* unnecessary zeros will be written to the binary. */
     /* If you need, for example, .init_array and .fini_array, those should be placed */

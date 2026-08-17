@@ -39,7 +39,7 @@ void loadTss() {
 
 void tssInit(uint64_t kStackTop) {
     ostreamk kout;
-    kout << "gdt: Creating TSS Descriptor (Kernel Stack Top: " << &kStackTop << ") :" << endl;
+    kout << "gdt: Creating TSS Descriptor (Kernel Stack Top: " << (uint64_t*)kStackTop << ") :" << endl;
 
     // 1. 将 TSS 清零
     memset(&tss, 0, sizeof(struct TSSEntry));

@@ -91,7 +91,7 @@ extern "C" void kernel_main(void) {
 
     pmmInit();
     uint64_t test_page = pmm_allocPage();
-    kout << "pmm: Allocated test page at physical address: " << &test_page << "\n";
+    kout << "pmm: Allocated test page at physical address: " << (uint64_t*)test_page << "\n";
 
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

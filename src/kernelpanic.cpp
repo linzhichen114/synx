@@ -1,54 +1,80 @@
 #include <stdarg.h>
 #include "ostreamk.h"
+#include "kallsyms.h"
 
-ostreamk kout;
 
-// get RIP
+static ostreamk kout;
+
+// 获取当前 RIP
 static inline uint64_t getRip() {
     uint64_t rip;
     asm volatile ("lea 0(%%rip), %0" : "=r"(rip));
     return rip;
 }
 
-static void printStackTrace() {
-    uint64_t rbp;
-    // 获取当前的 RBP
-    asm volatile ("mov %%rbp, %0" : "=r"(rbp));
+// 打印单个地址的符号信息
+extern "C" void printSymbol(uint64_t addr) {
+    const char* name = nullptr;
+    uint64_t offset = 0;
 
-    kout << "Call Trace:\n";
+    // 尝试解析符号
+    if (kallsyms_lookup(addr, &name, &offset)) {
+        kout << name << "+" << (uint64_t*)offset;
+    } else {
+        kout << "unknown";
+    }
+}
+
+static void printStackTrace(uint64_t rbp, uint64_t rip) {
+    kout << "\nCall Trace:\n";
     
-    // 遍历栈帧链表
-    while (rbp != 0) {
-        // rbp + 8 = rip
+    // 打印触发异常时的当前 RIP
+    kout << " [<" << (uint64_t*)rip << ">] ";
+    printSymbol(rip);
+    kout << "\n";
+
+    // 沿着 RBP 链向上回溯
+    while (rbp != 0 && rbp >= 0xffff800000000000ULL) {
+        // 安全检查：确保 rbp 是 8 字节对齐的
+        if (rbp & 7) break; 
+
         uint64_t ret_addr = *(uint64_t*)(rbp + 8);
         
-        // if already at the bottom of the stack break
+        // 如果返回地址为 0，说明已经到了栈底
         if (ret_addr == 0) break;
         
-        // Format: [<0x00000000001234AB>] ? function_name+0x0/0x0
-        // TODO: KALLSYMS SUPPORTS
-        (kout << " [<").writeHex_uint32((uint32_t)(ret_addr));
-        kout << ">] ? unknown+0x0/0x0\n";
+        kout << " [<" << (uint64_t*)ret_addr << ">] ";
+        printSymbol(ret_addr);
+        kout << "\n";
         
-        // 移动到上一个栈帧（当前栈帧底部保存了上一个栈帧的 RBP）
+        // 移动到上一个栈帧
         rbp = *(uint64_t*)rbp;
     }
 }
 
 extern "C" void kernel_panic(const char* message) {
-    // close interrupts
+    // 关闭中断，防止在 Panic 时被打断
     asm volatile ("cli");
 
-    kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---\n\n";
-
+    kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---\n";
     kout << "CPU: 0\n";
-    (kout << "RIP: [<").writeHex_uint32((uint32_t)(getRip()));
-    kout << ">] ? kernel_panic+0x0/0x0\n\n";
 
-    // print stack trace
-    printStackTrace();
+    // 打印当前的 RIP
+    uint64_t current_rip = getRip();
+    // 【修复】：去掉 &，直接输出 current_rip 的值
+    kout << "RIP: [<" << (uint64_t*)current_rip << ">] ";
+    printSymbol(current_rip);
+    kout << "\n";
+
+    // 获取当前的 RBP 并打印完整的调用栈
+    uint64_t current_rbp;
+    asm volatile ("mov %%rbp, %0" : "=r"(current_rbp));
+    printStackTrace(current_rbp, current_rip);
+
+    kout << "\n--- [ end Kernel panic ] ---\n";
 
     // Halt and catch fire
-    for (;;)
+    for (;;) {
         asm volatile ("hlt");
+    }
 }
