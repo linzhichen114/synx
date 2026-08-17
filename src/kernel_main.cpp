@@ -7,6 +7,8 @@ extern "C" {
 #include "ostreamk.h"
 #include "sysdef.h"
 #include "gdt.h"
+#include "idt.h"
+#include "mem/kmemory.h"
 
 
 
@@ -35,6 +37,12 @@ volatile struct limine_executable_cmdline_request executable_cmdline_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_memmap_request memmap_request = {
+    .id = LIMINE_MEMMAP_REQUEST_ID,
+    .revision = 0
+};
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .cpp file, as seen fit.
 
@@ -43,13 +51,6 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
-
-// Halt and catch fire function.
-static void hcf(void) {
-    for (;;) {
-        asm ("hlt");
-    }
-}
 
 // The following will be our kernel's entry point.
 // If renaming kernel_main() to something else, make sure to change the
@@ -67,19 +68,6 @@ extern "C" void kernel_main(void) {
         hcf();
     }
 
-    /*// Fetch the first framebuffer.
-    struct limine_framebuffer *framebuffer = framebuffer_request.response->framebuffers[0];
-
-    // Print a nice pattern to screen as an example.
-    // Note: we assume the framebuffer model is RGB with 32-bit pixels.
-    volatile uint32_t *fb_ptr = (volatile uint32_t *)framebuffer->address;
-    for (size_t y = 0; y < framebuffer->height; y++) {
-        for (size_t x = 0; x < framebuffer->width; x++) {
-            uint32_t nX = x * 255 / framebuffer->width;
-            uint32_t nY = y * 255 / framebuffer->height;
-            fb_ptr[y * (framebuffer->pitch / 4) + x] = (nY << 8) | nX;
-        }
-    }*/
     ostreamk kout;
     kout << KERNEL_NAME << " version " << KERNEL_VERSION << " (" << COMPILER_NAME << " " << COMPILER_VERSION << ") SMP " << BUILD_DATE << " " << BUILD_TIME << endl;
 
@@ -95,7 +83,15 @@ extern "C" void kernel_main(void) {
     kout << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
+
     kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
+
     gdtInit();
+    idtInit();
+
+    pmmInit();
+    uint64_t test_page = pmm_allocPage();
+    kout << "pmm: Allocated test page at physical address: " << &test_page << "\n";
+
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

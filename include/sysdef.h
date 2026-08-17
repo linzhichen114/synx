@@ -21,3 +21,9 @@
 #    define COMPILER_NAME    "unknown"
 #    define COMPILER_VERSION "unknown"
 #endif
+
+// Halt and catch fire function.
+extern "C" inline void hcf() {
+    for (;;)
+        asm ("hlt");
+}

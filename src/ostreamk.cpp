@@ -2,6 +2,7 @@
 #include "font.h"
 #include <limine.h>
 #include <stddef.h>
+#include <memory.h>
 
 
 extern volatile struct limine_framebuffer_request framebuffer_request;
@@ -31,13 +32,45 @@ namespace {
         return reinterpret_cast<volatile uint32_t*>(fb->address);
     }
 
-    // 换行处理
+    inline void scroll() {
+        volatile uint32_t* fb = getframebuffer();
+        if (!fb) return;
+
+        auto* fb_info = framebuffer_request.response->framebuffers[0];
+        size_t row_stride = fb_info->pitch / sizeof(uint32_t);
+        size_t line_height = FONT_HEIGHT; // 每次滚动一行的高度
+
+        // 1. 将第 2 行到最后一行的所有像素，整体往上移动一行的高度
+        // 计算需要搬运的总像素数：(总行数 - 1) * 每行高度 * 行步长
+        size_t pixels_to_move = (max_rows - 1) * line_height * row_stride;
+        size_t pixels_in_one_line = line_height * row_stride;
+
+        // 使用内存拷贝（从源地址拷贝到目的地址）
+        // 源地址：第 2 行的起始位置
+        // 目的地址：第 1 行的起始位置
+        const volatile uint32_t* src = fb + pixels_in_one_line;
+        volatile uint32_t* dst = fb;
+        
+        // 简单的内存搬运（如果 klibc 里有 memcpy 可以替换，这里用原生循环保证安全）
+        for (size_t i = 0; i < pixels_to_move; ++i) {
+            dst[i] = src[i];
+        }
+        //memcpy();
+
+        // 2. 将最后一行全部填充为背景色 (BG_COLOR)
+        volatile uint32_t* last_line = fb + (max_rows - 1) * line_height * row_stride;
+        for (size_t i = 0; i < pixels_in_one_line; ++i) {
+            last_line[i] = BG_COLOR;
+        }
+    }
+
+    // 【修改】：换行处理
     inline void newline() {
         cursor_x = 0;
         cursor_y++;
         if (cursor_y >= max_rows) {
-            // TODO: 可在此处实现滚屏(scroll)逻辑
-            cursor_y = max_rows - 1;
+            scroll(); // 触发滚屏
+            cursor_y = max_rows - 1; // 光标停留在最后一行
         }
     }
 

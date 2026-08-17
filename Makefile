@@ -17,72 +17,67 @@ CPPFLAGS :=
 LDFLAGS  :=
 
 ifeq ($(shell ! $(CXX) --version 2>/dev/null | grep -q '^Target: '; echo $$?),1)
-    override CXX += \
-        -target x86_64-unknown-none-elf
+	override CXX += \
+		-target x86_64-unknown-none-elf
 endif
 
 override CXXFLAGS += \
-    -Wall \
-    -Wextra \
-    -std=c++11 \
-    -nodefaultlibs \
-    -nostartfiles \
-    -nostdlib \
-    -nostdinc \
-    -nostdinc++ \
-    -ffreestanding \
-    -fno-stack-protector \
-    -fno-stack-check \
-    -fno-lto \
-    -fno-omit-frame-pointer \
-    -fno-PIC \
-    -ffunction-sections \
-    -fdata-sections \
-    -fno-exceptions \
-    -fno-rtti \
-    -m64 \
-    -march=x86-64 \
-    -mabi=sysv \
-    -mno-80387 \
-    -mno-mmx \
-    -mno-sse \
-    -mno-sse2 \
-    -mno-red-zone \
-    -mcmodel=kernel
+	-Wall \
+	-Wextra \
+	-std=c++11 \
+	-nodefaultlibs \
+	-nostartfiles \
+	-nostdlib \
+	-nostdinc \
+	-nostdinc++ \
+	-ffreestanding \
+	-fno-omit-frame-pointer\
+	-fstack-protector \
+	-fno-stack-check \
+	-fno-lto \
+	-fno-PIC \
+	-ffunction-sections \
+	-fdata-sections \
+	-fno-exceptions \
+	-fno-rtti \
+	-m64 \
+	-march=x86-64 \
+	-mabi=sysv \
+	-mno-80387 \
+	-mno-mmx \
+	-mno-sse \
+	-mno-sse2 \
+	-mno-red-zone \
+	-mcmodel=kernel
 
 override CPPFLAGS := \
-    -I include \
-    -isystem klibc\
-    $(CPPFLAGS) \
-    -MMD \
-    -MP
+	-I include \
+	-isystem klibc \
+	$(CPPFLAGS) \
+	-MMD \
+	-MP
 
 override LDFLAGS += \
-    -m elf_x86_64 \
-    -static \
-    -z max-page-size=0x1000 \
-    --gc-sections \
-    -T SynxKernel-x86_64.lds
+	-m elf_x86_64 \
+	-static \
+	-z max-page-size=0x1000 \
+	--gc-sections \
+	-T SynxKernel-x86_64.lds
 
-# 孩子们here有鬼
-__TEMP                 := $(wildcard src/*.cpp)
-# override CXXOBJECTS    := $(subst src/, build/obj/, $(__TEMP:.cpp=.o)) #$(CXXFILES:.cpp=.o)
-# override HEADER_DEPS   := $(__TEMP:.cpp=.d)
-override CXXOBJECTS    := $(patsubst src/%.cpp, build/obj/%.o, $(__TEMP))
-override HEADER_DEPS   := $(patsubst src/%.cpp, build/obj/%.d, $(__TEMP))
+__TEMP := $(wildcard src/*.cpp) $(wildcard mem/*.cpp)
+
+override CXXOBJECTS    := $(patsubst %.cpp, build/obj/%.o, $(__TEMP))
+override HEADER_DEPS   := $(patsubst %.cpp, build/obj/%.d, $(__TEMP))
 
 -include $(HEADER_DEPS)
 
-
-#$(CXXOBJECTS): $(__TEMP)  #%.cpp #build/obj/%.o
-build/obj/%.o: src/%.cpp
-	mkdir -p "$(dir $@)"
+build/obj/%.o: %.cpp
+	@mkdir -p "$(dir $@)"
 	$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 build/bin/$(OUTPUT): $(CXXOBJECTS) SynxKernel-x86_64.lds
-	mkdir -p "$(dir $@)"
+	@mkdir -p "$(dir $@)"
 	$(LD) $(LDFLAGS) $(CXXOBJECTS) -o $@
-
 
 .PHONY: kernel
 kernel: build/bin/$(OUTPUT)
@@ -115,9 +110,11 @@ run: all
 		-M q35 \
 		-cdrom $(IMAGE_NAME).iso \
 		-boot d \
+		-d int,cpu_reset \
+		-no-reboot \
 		$(QEMUFLAGS)
 
 .PHONY: clean
 clean:
-	rm -rf build/*
+	rm -rf build
 	make -C assets/limine-bootloader clean
