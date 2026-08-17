@@ -43,6 +43,12 @@ volatile struct limine_memmap_request memmap_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_hhdm_request hhdm_request = {
+    .id = LIMINE_HHDM_REQUEST_ID,
+    .revision = 0
+};
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .cpp file, as seen fit.
 
@@ -90,8 +96,6 @@ extern "C" void kernel_main(void) {
     idtInit();
 
     pmmInit();
-    uint64_t test_page = pmm_allocPage();
-    kout << "pmm: Allocated test page at physical address: " << (uint64_t*)test_page << "\n";
 
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }
