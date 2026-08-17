@@ -1,5 +1,6 @@
 #include <limine.h>
 #include "mem/kmemory.h"
+#include "sysdef.h"
 #include "ostreamk.h"
 
 static ostreamk kout;
@@ -9,7 +10,6 @@ extern volatile struct limine_memmap_request memmap_request;
 // Limine HHDM 请求（用于物理地址与虚拟地址的转换）
 extern volatile struct limine_hhdm_request hhdm_request;
 
-// 【优化】：将 bitmap 定义为 uint64_t，明确它存储的是物理地址，防止被误当作指针解引用
 static uint64_t bitmap = 0; 
 static size_t total_pages = 0;
 static size_t free_pages = 0;
@@ -31,7 +31,7 @@ static inline void bitmap_clear(size_t bit) {
 }
 
 extern "C" void pmmInit() {
-    kout << "pmm: Initializing Physical Memory Manager...\n";
+    kout << "pmm: Initializing...\n";
 
     // 1. 计算总内存大小，确定位图需要多大
     uint64_t highest_addr = 0;

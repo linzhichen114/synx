@@ -9,7 +9,7 @@ extern "C" {
 #include "gdt.h"
 #include "idt.h"
 #include "mem/kmemory.h"
-
+#include "mem/paging.h"
 
 
 
@@ -96,6 +96,9 @@ extern "C" void kernel_main(void) {
     idtInit();
 
     pmmInit();
+    vmmInit();
+
+    
 
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

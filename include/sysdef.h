@@ -27,3 +27,9 @@ extern "C" inline void hcf() {
     for (;;)
         asm ("hlt");
 }
+
+// 物理地址转虚拟地址
+#define phys_to_virt(phys) ((void*)((uint64_t)(phys) + hhdm_request.response->offset))
+
+// 虚拟地址转物理地址
+#define virt_to_phys(virt) ((uint64_t)(virt) - hhdm_request.response->offset)
