@@ -12,6 +12,7 @@ extern "C" {
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "mem/alloc.h"
+#include "proc/task.h"
 
 
 
@@ -100,6 +101,10 @@ extern "C" void kernel_main(void) {
     pmmInit();
     vmmInit();
     heapInit();
+    
+    wrap_current_task();
+
+    
     
     
 

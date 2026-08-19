@@ -34,3 +34,5 @@ extern "C" inline void hcf() {
 
 // 虚拟地址转物理地址
 #define virt_to_phys(virt) ((uint64_t)(virt) - hhdm_request.response->offset)
+
+#define KERNEL_STACK_SIZE 16384
