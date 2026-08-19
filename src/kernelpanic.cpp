@@ -1,6 +1,7 @@
 #include <stdarg.h>
 #include "ostreamk.h"
 #include "kallsyms.h"
+#include "sysdef.h"
 
 
 static ostreamk kout;
@@ -57,18 +58,12 @@ extern "C" void kernel_panic(const char* message) {
     asm volatile ("cli");
 
     kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---\n";
-    kout << "CPU: 0\n";
+    kout << "CPU: 0 " << KERNEL_NAME << " " << KERNEL_VERSION << endl;
 
-    // 打印当前的 RIP
-    uint64_t current_rip = getRip();
-    // 【修复】：去掉 &，直接输出 current_rip 的值
-    kout << "RIP: [<" << (uint64_t*)current_rip << ">] ";
-    printSymbol(current_rip);
-    kout << "\n";
-
-    // 获取当前的 RBP 并打印完整的调用栈
+    // 获取当前的 RIP RBP 并打印完整的调用栈
     uint64_t current_rbp;
     asm volatile ("mov %%rbp, %0" : "=r"(current_rbp));
+    uint64_t current_rip = getRip();
     printStackTrace(current_rbp, current_rip);
 
     kout << "\n--- [ end Kernel panic ] ---\n";

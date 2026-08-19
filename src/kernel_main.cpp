@@ -10,6 +10,8 @@ extern "C" {
 #include "idt.h"
 #include "mem/kmemory.h"
 #include "mem/paging.h"
+#include "mem/heap.h"
+#include "mem/alloc.h"
 
 
 
@@ -97,7 +99,8 @@ extern "C" void kernel_main(void) {
 
     pmmInit();
     vmmInit();
-
+    heapInit();
+    
     
 
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");

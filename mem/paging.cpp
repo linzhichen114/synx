@@ -16,7 +16,7 @@ page_table_t* pml4_base = nullptr;
 
 extern "C" void vmmInit() {
     ostreamk kout;
-    kout << "vmm: Initlizing...";
+    kout << "vmm: Initallizing..." << endl;
     uint64_t cr3;
     // 读取 CR3 寄存器，并屏蔽掉低 12 位（PCID 等标志位），得到纯粹的物理基址
     asm volatile("mov %%cr3, %0" : "=r"(cr3));

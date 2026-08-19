@@ -1,4 +1,5 @@
 #pragma once
+#include "limine.h"
 
 #define KERNEL_NAME    "Synx"   // Kernel name
 #define KERNEL_VERSION "0.0.0"  // Kernel version (major.minor.patch)
