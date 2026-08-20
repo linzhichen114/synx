@@ -63,3 +63,23 @@ extern "C" inline int memcmp(const void* s1, const void* s2, size_t n) {
 
     return 0;
 }
+
+extern "C" inline void strcat(char* dest, const char* src) {
+        while (*dest) dest++;
+        while (*src) *dest++ = *src++;
+        *dest = '\0';
+}
+
+extern "C" inline void itoa(char* buf, uint64_t val, int base = 16) {
+    const char* hex_chars = "0123456789abcdef";
+    char tmp[20];
+    int i = 0;
+    if (val == 0) tmp[i++] = '0';
+    while (val > 0) {
+        tmp[i++] = hex_chars[val % base];
+        val /= base;
+    }
+    // 反转
+    while (i > 0) *buf++ = tmp[--i];
+    *buf = '\0';
+}

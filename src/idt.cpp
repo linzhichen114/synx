@@ -3,6 +3,7 @@
 #include <memory.h>
 #include "sysdef.h"
 #include "kallsyms.h"
+#include <string.h>
 
 #define IDT_ENTRIES 256
 static IDTEntry idt[IDT_ENTRIES];
@@ -18,28 +19,6 @@ struct InterruptFrame {
     uint64_t rip, cs, rflags, rsp, ss;
 };
 
-// 手搓轻量级字符串处理函数（不依赖 klibc）
-namespace {
-    inline void panic_strcat(char* dest, const char* src) {
-        while (*dest) dest++;
-        while (*src) *dest++ = *src++;
-        *dest = '\0';
-    }
-
-    inline void panic_itoa(char* buf, uint64_t val, int base = 16) {
-        const char* hex_chars = "0123456789abcdef";
-        char tmp[20];
-        int i = 0;
-        if (val == 0) tmp[i++] = '0';
-        while (val > 0) {
-            tmp[i++] = hex_chars[val % base];
-            val /= base;
-        }
-        // 反转
-        while (i > 0) *buf++ = tmp[--i];
-        *buf = '\0';
-    }
-}
 
 extern "C" void exceptionHandler(InterruptFrame* frame) {
     const char* exceptions[] = {
@@ -54,30 +33,30 @@ extern "C" void exceptionHandler(InterruptFrame* frame) {
     msg_buf[0] = '\0';
 
     // 1. 拼接异常类型
-    panic_strcat(msg_buf, "IDT Exception: ");
+    strcat(msg_buf, "IDT Exception: ");
     if (frame->int_no < 16) {
-        panic_strcat(msg_buf, exceptions[frame->int_no]);
+        strcat(msg_buf, exceptions[frame->int_no]);
     } else {
-        panic_strcat(msg_buf, "Hardware Interrupt #");
+        strcat(msg_buf, "Hardware Interrupt #");
         char num_buf[8];
-        panic_itoa(num_buf, frame->int_no);
-        panic_strcat(msg_buf, num_buf);
+        itoa(num_buf, frame->int_no);
+        strcat(msg_buf, num_buf);
     }
 
     // 2. 拼接错误码
-    panic_strcat(msg_buf, " Err: 0x");
+    strcat(msg_buf, " Err: 0x");
     char err_buf[16];
-    panic_itoa(err_buf, frame->err_code);
-    panic_strcat(msg_buf, err_buf);
+    itoa(err_buf, frame->err_code);
+    strcat(msg_buf, err_buf);
 
     // 3. 如果是 Page Fault，顺便把 CR2 (非法访问地址) 也拼进去
     if (frame->int_no == 14) {
         uint64_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
-        panic_strcat(msg_buf, ", CR2: 0x");
+        strcat(msg_buf, ", CR2: 0x");
         char cr2_buf[20];
-        panic_itoa(cr2_buf, cr2);
-        panic_strcat(msg_buf, cr2_buf);
+        itoa(cr2_buf, cr2);
+        strcat(msg_buf, cr2_buf);
     }
 
     // 触发 Kernel Panic

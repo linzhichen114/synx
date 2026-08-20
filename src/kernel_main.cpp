@@ -12,7 +12,6 @@ extern "C" {
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "mem/alloc.h"
-#include "proc/task.h"
 
 
 
@@ -102,10 +101,7 @@ extern "C" void kernel_main(void) {
     vmmInit();
     heapInit();
     
-    wrap_current_task();
-
-    
-    
+    //
     
 
     kernel_panic("kernel_main: others function is not implemented yet - system halting.");
