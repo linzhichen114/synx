@@ -13,15 +13,19 @@ CPPFLAGS :=
 ASFLAGS  := --64 -march=x86-64
 LDFLAGS  :=
 QUIET     = 1
+DEBUG     = 
 
 # 交叉编译器检测
 ifeq ($(shell ! $(CXX) --version 2>/dev/null | grep -q '^Target: '; echo $$?),1)
 	override CXX += -target x86_64-unknown-none-elf
 endif
-ifeq ($(QUIET),1)
+ifneq ($(QUIET),)
 	override Q = @
 else
 	override Q=
+endif
+ifneq ($(DEBUG),)
+	override QEMUFLAGS += -s -S
 endif
 
 # ================= 编译参数 =================

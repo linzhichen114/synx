@@ -95,7 +95,8 @@ extern "C" void kernel_main(void) {
     kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
 
     gdtInit();
-    idtInit();
+    idt::idtInit();
+    idt::pitInit(100);
 
     pmmInit();
     vmmInit();

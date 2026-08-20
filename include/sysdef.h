@@ -29,6 +29,10 @@ extern "C" inline void hcf() {
         asm ("hlt");
 }
 
+extern "C" inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
 // 物理地址转虚拟地址
 #define phys_to_virt(phys) ((void*)((uint64_t)(phys) + hhdm_request.response->offset))
 
