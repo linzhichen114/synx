@@ -10,7 +10,6 @@ LD        = ld
 OBJCOPY   = objcopy
 CXXFLAGS := -g -O2 -pipe
 CPPFLAGS :=
-ASFLAGS  := --64 -march=x86-64
 LDFLAGS  :=
 QUIET     = 1
 DEBUG     = 
@@ -65,22 +64,6 @@ OTHER_OBJECTS := $(filter-out $(KALLSYMS_OBJ), $(CXXOBJECTS) $(ASOBJECTS))
 -include $(HEADER_DEPS)
 
 # ================= 构建规则 =================
-
-# 1. 通用 C++ 编译规则
-# build/obj/src/%.o: src/%.cpp
-# 	@mkdir -p "$(dir $@)"
-# 	@echo "  CXX     $<"
-# 	$(Q)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
-
-# build/obj/src/kallsyms/%.o: src/kallsyms/%.cpp
-# 	@mkdir -p "$(dir $@)"
-# 	@echo "  CXX     $<"
-# 	$(Q)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
-
-# build/obj/mem/%.o: mem/%.cpp
-# 	@mkdir -p "$(dir $@)"
-# 	@echo "  CXX     $<"
-# 	$(Q)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
 
 build/obj/src/%.cpp.o: src/%.cpp

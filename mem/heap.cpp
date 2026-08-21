@@ -47,8 +47,8 @@ static void expand_heap(size_t size) {
 // 初始化堆
 void heapInit() {
     ostreamk kout;
-    kout << "heap: Heap Initallized, size: "<< (uint32_t)(INITIAL_HEAP_PAGES * PAGE_SIZE) << endl;
     expand_heap(INITIAL_HEAP_PAGES * PAGE_SIZE);
+    kout << "heap: Heap was Sussessfully Initallized, size: "<< (uint32_t)(INITIAL_HEAP_PAGES * PAGE_SIZE) << endl;
 }
 
 // 内核分配函数

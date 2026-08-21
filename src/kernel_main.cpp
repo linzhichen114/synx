@@ -102,8 +102,15 @@ extern "C" void kernel_main(void) {
     vmmInit();
     heapInit();
     
-    //
-    
+    //s t
+    asm volatile("sti");  // ← 必须有这一行！
 
-    kernel_panic("kernel_main: others function is not implemented yet - system halting.");
+    kout << "IRQ0 test: Waiting for PIT ticks" << endl;
+
+    while (true) {
+        asm volatile("hlt");
+    }
+    //e t
+
+    //kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }
