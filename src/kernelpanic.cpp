@@ -4,8 +4,6 @@
 #include "sysdef.h"
 
 
-static ostreamk kout;
-
 // 获取当前 RIP
 static inline uint64_t getRip() {
     uint64_t rip;

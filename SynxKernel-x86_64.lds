@@ -57,6 +57,12 @@ SECTIONS
         *(.data .data.*)
     } :data
 
+    .init_array : ALIGN(8) {
+        __init_array_start = .;
+        KEEP(*(.init_array*))
+        __init_array_end = .;
+    }
+
     /* kallsyms symbols table */
     .kallsyms : ALIGN(8) {
         __symtab_start = .;

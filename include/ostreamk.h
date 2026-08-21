@@ -2,14 +2,16 @@
 
 #include <stdint.h>
 
-typedef struct argb {
-    uint32_t a;
-    uint32_t r;
-    uint32_t g;
-    uint32_t b;
-} ARGBColor_t, *pARGBColor_t;
+namespace kprint {
 
-inline constexpr uint32_t ARGBToHex(const uint32_t a, const uint32_t r, const uint32_t g, const uint32_t b) {
+typedef struct {
+    uint8_t a;
+    uint8_t r;
+    uint8_t g;
+    uint8_t b;
+} ARGBColor_t;
+
+inline constexpr uint32_t ARGBToHex(const uint8_t a, const uint8_t r, const uint8_t g, const uint8_t b) {
     return (a << 24) | (r << 16) | (g << 8) | b;
 }
 
@@ -19,29 +21,35 @@ inline constexpr uint32_t ARGBToHex(const ARGBColor_t& c) {
 
 inline constexpr ARGBColor_t HexToARGB(uint32_t hex) {
     return ARGBColor_t {
-        static_cast<uint32_t>((hex >> 24) & 0xFF),
-        static_cast<uint32_t>((hex >> 16) & 0xFF),
-        static_cast<uint32_t>((hex >> 8) & 0xFF),
-        static_cast<uint32_t>(hex & 0xFF)
+        static_cast<uint8_t>((hex >> 24) & 0xFF),
+        static_cast<uint8_t>((hex >> 16) & 0xFF),
+        static_cast<uint8_t>((hex >> 8) & 0xFF),
+        static_cast<uint8_t>(hex & 0xFF)
     };
 }
 
-constexpr uint32_t FG_COLOR    = ARGBToHex(  0, 255, 255, 255); // 白色前景 0x00FFFFFF
-constexpr uint32_t BG_COLOR    = ARGBToHex(  0,   0,   0,   0); // 黑色背景 0x00000000
-constexpr uint32_t FONT_WIDTH  = 8;
-constexpr uint32_t FONT_HEIGHT = 16;
-
 class ostreamk {
 private:
-    ;
+    ARGBColor_t fg;
+    ARGBColor_t bg;
 public:
-    ostreamk() = default;
+    ostreamk();
+    ostreamk(const ARGBColor_t fg, const ARGBColor_t bg);
+    ostreamk(const uint32_t    fg, const uint32_t    bg);
+    ostreamk(ostreamk&) = delete;
+    ostreamk(ostreamk&&) = delete;
+
+    void drawChar(char c, uint64_t x, uint64_t y);
+    void newline();
+    void scroll();
+
     void write(const uint8_t c);
     void write(const uint8_t* str);
     void write(const char c);
     void write(const char* str);
     void writeHex_uint32(uint32_t val);
     void writeHex_uint16(uint16_t val);
+    void writeHex_uint8(uint8_t val);
     friend ostreamk& operator<<(ostreamk& os, const char*     s); 
     friend ostreamk& operator<<(ostreamk& os, const uint8_t   v);  
     friend ostreamk& operator<<(ostreamk& os, const uint16_t  v);  
@@ -53,8 +61,22 @@ public:
     friend ostreamk& operator<<(ostreamk& os, const uint64_t* p);
     // friend ostreamk& operator<<(ostreamk& os, const void*     p);
     
+    uint32_t __get_fg() {
+        return ARGBToHex(fg);
+    }
+    uint32_t __get_bg() {
+        return ARGBToHex(bg);
+    }
+    ostreamk& __log_prefix();
 };
+
+extern ostreamk __kout;
+}
 
 extern "C" void kernel_panic(const char* message);
 
-constexpr const char* endl = "\n";
+
+#define FONT_WIDTH ((uint32_t)8)
+#define FONT_HEIGHT ((uint32_t)16)
+#define endl "\n";
+#define kout (kprint::__kout)

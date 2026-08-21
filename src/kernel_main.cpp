@@ -14,7 +14,7 @@ extern "C" {
 #include "mem/alloc.h"
 
 
-
+/* Limine Requests */
 // Set the base revision to 6, this is recommended as this is the latest
 // base revision described by the Limine boot protocol specification.
 // See specification for further info.
@@ -60,6 +60,18 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
+/* Constructors Initalizing */
+typedef void (*init_func_t)();
+
+extern "C" init_func_t __init_array_start[];
+extern "C" init_func_t __init_array_end[];
+
+static inline void __call_global_constructors() {
+    for (init_func_t* func = __init_array_start; func != __init_array_end; ++func)
+        if (*func)
+            (*func)();
+}
+
 // The following will be our kernel's entry point.
 // If renaming kernel_main() to something else, make sure to change the
 // linker script accordingly.
@@ -76,19 +88,16 @@ extern "C" void kernel_main(void) {
         hcf();
     }
 
-    ostreamk kout;
+    __call_global_constructors();
+
     kout << KERNEL_NAME << " version " << KERNEL_VERSION << " (" << COMPILER_NAME << " " << COMPILER_VERSION << ") SMP " << BUILD_DATE << " " << BUILD_TIME << endl;
+
+    kout << "Sussessfully called all constructors." << endl;
 
     const auto fb0 = framebuffer_request.response->framebuffers[0];
     kout << "fb0: Base " << (uint64_t*)fb0->address << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
     kout << "fb0: Mode " << fb0->width << "x" << fb0->height << " @ " << fb0->bpp << "bpp" << endl;
     kout << "fb0: Color mode: ARGB" << endl;
-    const ARGBColor_t fg_col = HexToARGB(FG_COLOR);
-    const ARGBColor_t bg_col = HexToARGB(BG_COLOR);
-    (kout << "fb0: Frontground color: ARGB [ A: " << fg_col.a << " R: " << fg_col.r << " G: " << fg_col.g<< " B: " << fg_col.b << " ], HEX ").writeHex_uint16(FG_COLOR);
-    kout << endl;
-    (kout << "fb0: Background color: ARGB [ A: " << bg_col.a << " R: " << bg_col.r << " G: " << bg_col.g<< " B: " << bg_col.b << " ], HEX ").writeHex_uint16(BG_COLOR);
-    kout << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
 

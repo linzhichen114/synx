@@ -38,7 +38,6 @@ void loadTss() {
 }
 
 void tssInit(uint64_t kStackTop) {
-    ostreamk kout;
     kout << "gdt: Creating TSS Descriptor (Kernel Stack Top: " << (uint64_t*)kStackTop << ") :" << endl;
 
     // 1. 将 TSS 清零
@@ -75,7 +74,6 @@ void tssInit(uint64_t kStackTop) {
 }
 
 void gdtInit() {
-    ostreamk kout;
 
     kout << "gdt: Initlizing GDT & TSS..." << endl;
 

@@ -15,7 +15,6 @@ page_table_t* pml4_base = nullptr;
 #define PTE_INDEX(va) (((va) >> 12) & 0x1FF)
 
 extern "C" void vmmInit() {
-    ostreamk kout;
     kout << "vmm: Initallizing..." << endl;
     uint64_t cr3;
     // 读取 CR3 寄存器，并屏蔽掉低 12 位（PCID 等标志位），得到纯粹的物理基址

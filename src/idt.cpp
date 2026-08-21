@@ -70,7 +70,7 @@ extern "C" void irqHandler(InterruptFrame* frame) {
             
         default:
             // 未处理的 IRQ，暂时忽略或打印警告
-            ostreamk kout; kout << "irqHandler: WARNING: Not Implemented IRQ - ignored." << endl;
+            kout << "irqHandler: WARNING: Not Implemented IRQ - ignored." << endl;
             break;
     }
 }

@@ -3,7 +3,6 @@
 #include "sysdef.h"
 #include "ostreamk.h"
 
-static ostreamk kout;
 
 // Limine 内存映射请求
 extern volatile struct limine_memmap_request memmap_request;
