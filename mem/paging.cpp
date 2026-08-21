@@ -6,7 +6,7 @@
 #include "ostreamk.h"
 
 
-page_table_t* pml4_base = nullptr;
+paging::page_table_t* pml4_base = nullptr;
 
 // 获取虚拟地址各级页表的索引
 #define PGD_INDEX(va) (((va) >> 39) & 0x1FF)
@@ -14,7 +14,13 @@ page_table_t* pml4_base = nullptr;
 #define PMD_INDEX(va) (((va) >> 21) & 0x1FF)
 #define PTE_INDEX(va) (((va) >> 12) & 0x1FF)
 
-extern "C" void vmmInit() {
+constexpr uint64_t MMIO_FLAGS = 0x03 | (1ULL << 4) | (1ULL << 3); // 0x1B
+
+namespace paging {
+
+page_table_t* pml4_base = nullptr;
+
+extern "C" void init() {
     kout << "vmm: Initallizing..." << endl;
     uint64_t cr3;
     // 读取 CR3 寄存器，并屏蔽掉低 12 位（PCID 等标志位），得到纯粹的物理基址
@@ -24,7 +30,7 @@ extern "C" void vmmInit() {
     pml4_base = (page_table_t*)phys_to_virt(cr3 & ~0xFFF);
 }
 
-void vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
+void map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
     // 安全检查：确保 pml4_base 已经被初始化
     if (!pml4_base) {
         // 如果还没初始化就尝试映射，直接 Panic
@@ -63,4 +69,28 @@ void vmm_map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
 
     // 4. 最终映射到 PTE
     pt->entries[pte_idx] = phys | flags;
+}
+
+}
+
+uint64_t mmap_mmio(uint64_t phys_addr, uint64_t size) {
+    uint64_t virt_addr = phys_addr + hhdm_request.response->offset;
+
+    // 按页对齐并逐页映射
+    uint64_t aligned_phys = phys_addr & ~0xFFFULL;
+    uint64_t offset_in_page = phys_addr & 0xFFFULL;
+    uint64_t total_size = size + offset_in_page;
+
+    for (uint64_t off = 0; off < total_size; off += 0x1000) {
+        paging::map_page(
+            virt_addr + off - offset_in_page,
+            aligned_phys + off,
+            MMIO_FLAGS
+        );
+    }
+
+    // 刷新 TLB
+    asm volatile("mov %%cr3, %%rax\n mov %%rax, %%cr3" ::: "rax", "memory");
+
+    return virt_addr;
 }

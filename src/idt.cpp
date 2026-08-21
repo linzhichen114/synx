@@ -4,6 +4,7 @@
 #include "sysdef.h"
 #include "kallsyms.h"
 #include "proc/sched.h"
+#include "apic/apic.h"
 
 namespace idt {
 #define IDT_ENTRIES 256
@@ -57,20 +58,18 @@ extern "C" void exceptionHandler(InterruptFrame* frame) {
 }
 
 extern "C" void irqHandler(InterruptFrame* frame) {
-    uint8_t irq = frame->int_no - 32;
+    uint8_t vector = frame->int_no;
     
-    switch (irq) {
-        case 0: // PIT Timer Tick
-            // TODO: 未来在这里发送 EOI (End of Interrupt) 给 PIC/APIC
-            // outb(0x20, 0x20); // 如果用的是 8259 PIC
-            
-            // 触发抢占式调度
+    switch (vector) {
+        case apic::APIC_TIMER_VECTOR: // 32
+            apic::send_eoi();
             scheduler::schedule();
             break;
             
         default:
-            // 未处理的 IRQ，暂时忽略或打印警告
-            kout << "irqHandler: WARNING: Not Implemented IRQ - ignored." << endl;
+            kout << "irqHandler: WARNING: Unhandled vector " 
+                 << vector << " - ignored." << endl;
+            apic::send_eoi();
             break;
     }
 }
@@ -112,14 +111,6 @@ __attribute__((naked)) void isr_stub_14() {
     );
 }
 
-// 处理 IRQ0
-__attribute__((naked)) void irq0_stub() {
-    __asm__ volatile(
-        "push $0 \n"       // 手动补齐错误码
-        "push $32 \n"      // 压入中断号 32
-        "jmp irq_common_asm \n"
-    );
-}
 
 __attribute__((naked)) void isr_common_asm() {
     __asm__ volatile(
@@ -182,8 +173,8 @@ __attribute__((naked)) void irq_common_asm() {
         "pushq %r14 \n"
         "pushq %r15 \n"
         
-        "movq %rsp, %rdi \n"   // 传递 InterruptFrame* 作为第一个参数
-        "call irqHandler \n"  // 调用 C 语言硬件中断分发器
+        "movq %rsp, %rdi \n"   // 传递 InterruptFrame* 给 C++ 处理函数
+        "call irqHandler \n"
         
         "popq %r15 \n"
         "popq %r14 \n"
@@ -201,37 +192,38 @@ __attribute__((naked)) void irq_common_asm() {
         "popq %rbx \n"
         "popq %rax \n"
         
-        "addq $16, %rsp \n"
-        "iretq \n"
+        "addq $16, %rsp \n"     // 弹出中断号 + 伪错误码
+        "iretq \n"              
     );
+}
+
+
+__attribute__((naked)) void irq_stub_timer() {
+    __asm__ volatile(
+        "push $0 \n"             // 补齐错误码
+        "push $32 \n"            // 压入中断向量号 32
+        "jmp irq_common_asm \n"
+    );
+}
+
+void set_irqHandler(uint8_t vector, uint64_t handler_addr) {
+    if (vector < 32 || vector > 255) return; // 保护异常向量不被覆盖
+    idtSetGate(vector, handler_addr);
 }
 
 void idtInit() {
     memset(idt, 0, sizeof(idt));
 
-    // 异常门
     idtSetGate(0, (uint64_t)isr_stub_0);
     idtSetGate(8, (uint64_t)isr_stub_8);
     idtSetGate(14, (uint64_t)isr_stub_14);
 
-    // 硬件中断门, IRQ0 = INT 32
-    idtSetGate(32, (uint64_t)irq0_stub);
+    set_irqHandler(apic::APIC_TIMER_VECTOR, (uint64_t)irq_stub_timer);
 
     idtPtr.limit = sizeof(idt) - 1;
     idtPtr.base = (uint64_t)&idt;
     
     __asm__ volatile ("lidt %0" : : "m"(idtPtr));
-}
-
-void pitInit(uint32_t freq) {
-    uint16_t divisor = PIT_FREQUENCY / freq;
-    
-    // 命令字: Channel 0, Lobyte/Hibyte, Mode 3 (Square Wave), Binary
-    outb(0x43, 0x36);
-    
-    // 写入分频值 (先低字节，后高字节)
-    outb(0x40, (uint8_t)(divisor & 0xFF));
-    outb(0x40, (uint8_t)((divisor >> 8) & 0xFF));
 }
 
 }

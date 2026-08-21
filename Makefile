@@ -41,7 +41,7 @@ override CXXFLAGS += \
 
 override CPPFLAGS := \
 	-I include -isystem klibc \
-	$(CPPFLAGS) -MMD -MP
+	$(CPPFLAGS) -MMD -MP -DAPIC_USE_PERIODIC
 
 override LDFLAGS += \
 	-m elf_x86_64 -static \

@@ -30,6 +30,7 @@ struct InterruptFrame {
 };
 
 void idtInit();
-void pitInit(uint32_t freq);
+
+void set_irq_handler(uint8_t vector, uint64_t handler_addr);
 
 }

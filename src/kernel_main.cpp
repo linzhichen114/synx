@@ -12,6 +12,7 @@ extern "C" {
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "mem/alloc.h"
+#include "apic/apic.h"
 
 
 /* Limine Requests */
@@ -105,21 +106,19 @@ extern "C" void kernel_main(void) {
 
     gdtInit();
     idt::idtInit();
-    idt::pitInit(100);
 
     pmmInit();
-    vmmInit();
+    paging::init();
     heapInit();
     
-    //s t
-    asm volatile("sti");  // ← 必须有这一行！
+    asm volatile("cli");
+    apic::init();
+    kout << "apic: Initialized, Base: " << apic::get_base_info().mmio_base << endl;
 
-    kout << "IRQ0 test: Waiting for PIT ticks" << endl;
+    apic::timer_init(32, true, 0);
+    kout << "apic: Preemptive scheduling enabled." << endl;
 
-    while (true) {
-        asm volatile("hlt");
-    }
-    //e t
+    asm volatile("sti");
 
-    //kernel_panic("kernel_main: others function is not implemented yet - system halting.");
+    kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }
