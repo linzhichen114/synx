@@ -1,6 +1,6 @@
 #include "gdt.h"
-#include "ostreamk.h"
-#include <memory.h>
+#include "kprint.h"
+#include <string.h>
 
 static uint64_t _kernel_stack_top;
 static GDTEntry gdt[7];
@@ -38,13 +38,13 @@ void loadTss() {
 }
 
 void tssInit(uint64_t kStackTop) {
-    kout << "gdt: Creating TSS Descriptor (Kernel Stack Top: " << (uint64_t*)kStackTop << ") :" << endl;
+    kout << "gdt: Creating TSS Descriptor:" << endl;
 
     // 1. 将 TSS 清零
     memset(&tss, 0, sizeof(struct TSSEntry));
 
     // 2. 设置 Ring 0 栈指针
-    kout << "gdt:   Setting RSP0..." << endl;
+    kout << "gdt:   Setting RSP0... (Kernel Stack Top: " << (uint64_t*)kStackTop << ")" << endl;
     tss.rsp0 = kStackTop;
 
     // 3. 设置 I/O 权限位图基址

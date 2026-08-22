@@ -2,7 +2,7 @@
 #include "mem/kmemory.h"
 #include "mem/paging.h"
 #include "sysdef.h"
-#include "ostreamk.h"
+#include "kprint.h"
 #include <stddef.h>
 #include <stdint.h>
 

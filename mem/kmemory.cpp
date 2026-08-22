@@ -1,19 +1,16 @@
 #include <limine.h>
 #include "mem/kmemory.h"
 #include "sysdef.h"
-#include "ostreamk.h"
+#include "kprint.h"
 
 
-// Limine 内存映射请求
 extern volatile struct limine_memmap_request memmap_request;
-// Limine HHDM 请求（用于物理地址与虚拟地址的转换）
 extern volatile struct limine_hhdm_request hhdm_request;
 
 static uint64_t bitmap = 0; 
 static size_t total_pages = 0;
 static size_t free_pages = 0;
 
-// 内部辅助函数：安全地访问位图
 static inline bool bitmap_get(size_t bit) {
     uint8_t* bitmap_virt = (uint8_t*)phys_to_virt(bitmap);
     return (bitmap_virt[bit / 8] >> (bit % 8)) & 1;

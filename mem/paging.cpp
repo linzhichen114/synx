@@ -2,8 +2,8 @@
 #include "sysdef.h"
 #include "mem/kmemory.h"
 #include "mem/paging.h"
-#include <memory.h>
-#include "ostreamk.h"
+#include <string.h>
+#include "kprint.h"
 
 
 paging::page_table_t* pml4_base = nullptr;

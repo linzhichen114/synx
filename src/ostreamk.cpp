@@ -1,8 +1,8 @@
-#include "ostreamk.h"
+#include "kprint.h"
 #include "font.h"
 #include <limine.h>
 #include <stddef.h>
-#include <memory.h>
+#include <string.h>
 
 
 extern volatile struct limine_framebuffer_request framebuffer_request;

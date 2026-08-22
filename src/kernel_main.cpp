@@ -4,7 +4,7 @@
 extern "C" {
 #include <limine.h>
 }
-#include "ostreamk.h"
+#include "kprint.h"
 #include "sysdef.h"
 #include "gdt.h"
 #include "idt.h"
@@ -79,21 +79,18 @@ static inline void __call_global_constructors() {
 extern "C" void kernel_main(void) {
 
     // Ensure the bootloader actually understands our base revision (see spec).
-    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) {
+    if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) 
         hcf();
-    }
 
     // Ensure we got a framebuffer.
-    if (framebuffer_request.response == NULL
-     || framebuffer_request.response->framebuffer_count < 1) {
+    if (framebuffer_request.response == NULL || framebuffer_request.response->framebuffer_count < 1)
         hcf();
-    }
 
     __call_global_constructors();
 
     kout << KERNEL_NAME << " version " << KERNEL_VERSION << " (" << COMPILER_NAME << " " << COMPILER_VERSION << ") SMP " << BUILD_DATE << " " << BUILD_TIME << endl;
 
-    kout << "Sussessfully called all constructors." << endl;
+    kout << "Successfully called all constructors." << endl;
 
     const auto fb0 = framebuffer_request.response->framebuffers[0];
     kout << "fb0: Base " << (uint64_t*)fb0->address << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
@@ -103,6 +100,7 @@ extern "C" void kernel_main(void) {
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
 
     kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
+
 
     gdtInit();
     idt::idtInit();

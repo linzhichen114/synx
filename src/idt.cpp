@@ -1,6 +1,6 @@
 #include "idt.h"
-#include "ostreamk.h"
-#include <memory.h>
+#include "kprint.h"
+#include <string.h>
 #include "sysdef.h"
 #include "kallsyms.h"
 #include "proc/sched.h"

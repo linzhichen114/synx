@@ -1,10 +1,9 @@
-// arch/x86_64/apic.cpp
 #include "apic/apic.h"
 #include "apic/msr.h"
 #include "cpuid.h"
 #include "pic_calibrate.h"
 #include "sysdef.h"
-#include "ostreamk.h"
+#include "kprint.h"
 #include "mem/paging.h"
 
 

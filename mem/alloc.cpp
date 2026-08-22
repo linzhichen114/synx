@@ -1,6 +1,6 @@
 #include "mem/alloc.h"
 #include "mem/heap.h"
-#include "ostreamk.h"
+#include "kprint.h"
 
 void* operator new(uint64_t size) {
     void* ptr = kmalloc(size);

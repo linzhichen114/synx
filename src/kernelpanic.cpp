@@ -1,5 +1,5 @@
 #include <stdarg.h>
-#include "ostreamk.h"
+#include "kprint.h"
 #include "kallsyms.h"
 #include "sysdef.h"
 
