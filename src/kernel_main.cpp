@@ -35,12 +35,6 @@ volatile struct limine_framebuffer_request framebuffer_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
-volatile struct limine_executable_cmdline_request executable_cmdline_request = {
-    .id = LIMINE_EXECUTABLE_CMDLINE_REQUEST_ID,
-    .revision = 0
-};
-
-__attribute__((used, section(".limine_requests")))
 volatile struct limine_memmap_request memmap_request = {
     .id = LIMINE_MEMMAP_REQUEST_ID,
     .revision = 0
@@ -99,7 +93,7 @@ extern "C" void kernel_main(void) {
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
 
-    kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
+    // kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
 
 
     gdtInit();

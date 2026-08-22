@@ -6,6 +6,7 @@
 #include "proc/sched.h"
 #include "apic/apic.h"
 
+
 namespace idt {
 #define IDT_ENTRIES 256
 static IDTEntry idt[IDT_ENTRIES];
@@ -67,8 +68,8 @@ extern "C" void irqHandler(InterruptFrame* frame) {
             break;
             
         default:
-            kout << "irqHandler: WARNING: Unhandled vector " 
-                 << vector << " - ignored." << endl;
+            kout << "irqHandler: WARNING: Unhandled vector \"" 
+                 << vector << "\"." << endl;
             apic::send_eoi();
             break;
     }

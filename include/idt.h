@@ -3,8 +3,6 @@
 
 namespace idt {
 
-#define PIT_FREQUENCY 1193182  // PIT 基准时钟频率 (Hz)
-
 struct IDTEntry {
     uint16_t offset_low;
     uint16_t selector;
@@ -31,6 +29,6 @@ struct InterruptFrame {
 
 void idtInit();
 
-void set_irq_handler(uint8_t vector, uint64_t handler_addr);
+void set_irqHandler(uint8_t vector, uint64_t handler_addr);
 
 }
