@@ -6,29 +6,35 @@
 #include "proc/sched.h"
 #include "apic/apic.h"
 
+idt::IDTPtr idtPtr;
 
 namespace idt {
+
 #define IDT_ENTRIES 256
 static IDTEntry idt[IDT_ENTRIES];
-static IDTPtr idtPtr;
 
-extern "C" void isr_common_asm();
-extern "C" void irq_common_asm();
+extern "C" void isr_entry();
+extern "C" void irq_entry();
 
-extern "C" void exceptionHandler(InterruptFrame* frame) {
+extern "C" void exceptionHandler(InterruptFrame* frame, uint64_t error_code) {
+    asm volatile("cli");
+
     const char* exceptions[] = {
-        "Division By Zero (#DE)", "Debug (#DB)", "Non-maskable Interrupt ( - )", "Breakpoint (#BP)",
+        "Division By Zero (#DE)", "Debug (#DB)", "Non-maskable Interrupt", "Breakpoint (#BP)",
         "Overflow (#OF)", "Bound Range Exceeded (#BR)", "Invalid Opcode (#UD)", "Device Not Available (#NM)",
-        "Double Fault (#DF)", "Coprocessor Segment Overrun ( - )", "Invalid TSS (#TS)", "Segment Not Present (#NP)",
-        "Stack-Segment Fault (#SS)", "General Protection Fault (#GPF)", "Page Fault (#PF)", "Reserved( - )"
+        "Double Fault (#DF)", "Coprocessor Segment Overrun", "Invalid TSS (#TS)", "Segment Not Present (#NP)",
+        "Stack-Segment Fault (#SS)", "General Protection Fault (#GP)", "Page Fault (#PF)",
+        "Reserved", 
+        "x87 Floating-Point Exception (#MF)", "Alignment Check (#AC)", "Machine Check (#MC)", "SIMD Floating-Point Exception (#XF)",
+        "Virtualization Exception (#VE)", "Control Protection Exception (#CP)",
+        "Reserved", "Reserved", "Reserved", "Reserved", "Reserved",
+        "Hypervisor Injection Exception (#HV)", "VMM Communication Exception (#VC)", "Security Exception (#SX)",
+        "Reserved", "Triple Fault"
     };
 
-    // 在栈上分配一个足够大的缓冲区来拼接消息
-    char msg_buf[128];
-    msg_buf[0] = '\0';
+    char msg_buf[128]; msg_buf[0] = '\0';
 
-    // 1. 拼接异常类型
-    strcat(msg_buf, "IDT Exception: ");
+    strcat(msg_buf, "ISR: ");
     if (frame->int_no < 16) {
         strcat(msg_buf, exceptions[frame->int_no]);
     } else {
@@ -38,13 +44,17 @@ extern "C" void exceptionHandler(InterruptFrame* frame) {
         strcat(msg_buf, num_buf);
     }
 
-    // 2. 拼接错误码
-    strcat(msg_buf, " Err: 0x");
-    char err_buf[16];
-    itoa(err_buf, frame->err_code);
+    char err_buf[16]; err_buf[0] = '\0';
+    if (frame->int_no == 8 || frame->int_no == 10
+     || frame->int_no == 11 || frame->int_no == 12
+     || frame->int_no == 13 || frame->int_no == 14
+     || frame->int_no == 17 || frame->int_no == 21
+     || frame->int_no == 29 || frame->int_no == 30) {
+        strcat(msg_buf, " - Err: 0x");
+        itoa(err_buf, error_code);
+    }
     strcat(msg_buf, err_buf);
 
-    // 3. 如果是 Page Fault，顺便把 CR2 (非法访问地址) 也拼进去
     if (frame->int_no == 14) {
         uint64_t cr2;
         __asm__ volatile("mov %%cr2, %0" : "=r"(cr2));
@@ -54,177 +64,218 @@ extern "C" void exceptionHandler(InterruptFrame* frame) {
         strcat(msg_buf, cr2_buf);
     }
 
-    // 触发 Kernel Panic
     kernel_panic(msg_buf);
 }
 
 extern "C" void irqHandler(InterruptFrame* frame) {
     uint8_t vector = frame->int_no;
-    
+
     switch (vector) {
-        case apic::APIC_TIMER_VECTOR: // 32
+        case apic::APIC_TIMER_VECTOR:
             apic::send_eoi();
             scheduler::schedule();
             break;
-            
         default:
-            kout << "irqHandler: WARNING: Unhandled vector \"" 
+            kout << "idt: WARNING: Unhandled IRQ, vector \""
                  << vector << "\"." << endl;
             apic::send_eoi();
             break;
     }
 }
 
-// 设置 IDT 门描述符
 static void idtSetGate(uint8_t num, uint64_t handler) {
     idt[num].offset_low  = (uint16_t)(handler & 0xFFFF);
-    idt[num].selector    = 0x08;      // 内核代码段
-    idt[num].ist         = 0;         
-    idt[num].type_attr   = 0x8E;      // 64位中断门, DPL=0, Present=1
+    idt[num].selector    = 0x08;
+    idt[num].ist         = 0;
+    idt[num].type_attr   = 0x8E;
     idt[num].offset_mid  = (uint16_t)((handler >> 16) & 0xFFFF);
     idt[num].offset_high = (uint32_t)((handler >> 32) & 0xFFFFFFFF);
     idt[num].zero        = 0;
 }
 
 
-// 处理没有错误码的异常（如 Divide Error）
+__attribute__((naked)) void isr_stub_generic() {
+    __asm__ volatile(
+        "push $0\n"
+        "push $0xFF\n"
+        "jmp isr_entry\n"
+    );
+}
+
+// #DE
 __attribute__((naked)) void isr_stub_0() {
     __asm__ volatile(
-        "push $0 \n"      // 手动补齐错误码
-        "push $0 \n"      // 压入中断号 0
-        "jmp isr_common_asm \n"
+        "push $0\n"
+        "push $0\n"
+        "jmp isr_entry\n"
     );
 }
 
-// 处理自带错误码的异常（如 Double Fault）
+// #UD
+__attribute__((naked)) void isr_stub_6() {
+    __asm__ volatile(
+        "push $0\n"
+        "push $6\n"
+        "jmp isr_entry\n"
+    );
+}
+
+// #DF
 __attribute__((naked)) void isr_stub_8() {
     __asm__ volatile(
-        "push $8 \n"      // 压入中断号 8
-        "jmp isr_common_asm \n"
+        "cli\n"
+        "mov $0xDF, %%al\n"
+        "out %%al, $0x80\n"
+        "hlt\n"
+        "jmp .-2\n"
+        ::: "al"
+    );__builtin_unreachable();
+
+    __asm__ volatile(
+        "cli\n"
+        "push $8\n"
+        "jmp isr_entry\n"
     );
 }
 
-// 处理 Page Fault
+// Coprocessor Segment Overrun
+__attribute__((naked)) void isr_stub_9() {
+    __asm__ volatile(
+        "push $0\n"
+        "push $9\n"
+        "jmp isr_entry\n"
+    );
+}
+
+// #GP
+__attribute__((naked)) void isr_stub_13() {
+    __asm__ volatile(
+        "push $13\n"
+        "jmp isr_entry\n"
+    );
+}
+
+// #PF
 __attribute__((naked)) void isr_stub_14() {
     __asm__ volatile(
-        "push $14 \n"     // 压入中断号 14
-        "jmp isr_common_asm \n"
+        "push $14\n"
+        "jmp isr_entry\n"
     );
 }
 
-
-__attribute__((naked)) void isr_common_asm() {
+__attribute__((naked)) void isr_entry() {
     __asm__ volatile(
-        "pushq %rax \n"
-        "pushq %rbx \n"
-        "pushq %rcx \n"
-        "pushq %rdx \n"
-        "pushq %rsi \n"
-        "pushq %rdi \n"
-        "pushq %rbp \n"
-        "pushq %r8  \n"
-        "pushq %r9  \n"
-        "pushq %r10 \n"
-        "pushq %r11 \n"
-        "pushq %r12 \n"
-        "pushq %r13 \n"
-        "pushq %r14 \n"
-        "pushq %r15 \n"
-        
-        "movq %rsp, %rax \n"
-        "movq %rax, %rdi \n"
-        "call exceptionHandler \n"
-        
-        "popq %r15 \n"
-        "popq %r14 \n"
-        "popq %r13 \n"
-        "popq %r12 \n"
-        "popq %r11 \n"
-        "popq %r10 \n"
-        "popq %r9  \n"
-        "popq %r8  \n"
-        "popq %rbp \n"
-        "popq %rdi \n"
-        "popq %rsi \n"
-        "popq %rdx \n"
-        "popq %rcx \n"
-        "popq %rbx \n"
-        "popq %rax \n"
-        
-        "addq $16, %rsp \n"
-        "iretq \n"              
+        "pushq %rax\n"
+        "pushq %rbx\n"
+        "pushq %rcx\n"
+        "pushq %rdx\n"
+        "pushq %rsi\n"
+        "pushq %rdi\n"
+        "pushq %rbp\n"
+        "pushq %r8\n"
+        "pushq %r9\n"
+        "pushq %r10\n"
+        "pushq %r11\n"
+        "pushq %r12\n"
+        "pushq %r13\n"
+        "pushq %r14\n"
+        "pushq %r15\n"
+        "movq %rsp, %rdi\n"
+        "movq 120(%rsp), %rsi\n"
+        "call exceptionHandler\n"
+        "popq %r15\n"
+        "popq %r14\n"
+        "popq %r13\n"
+        "popq %r12\n"
+        "popq %r11\n"
+        "popq %r10\n"
+        "popq %r9\n"
+        "popq %r8\n"
+        "popq %rbp\n"
+        "popq %rdi\n"
+        "popq %rsi\n"
+        "popq %rdx\n"
+        "popq %rcx\n"
+        "popq %rbx\n"
+        "popq %rax\n"
+        "addq $16, %rsp\n"
+        "iretq\n"
     );
 }
 
-__attribute__((naked)) void irq_common_asm() {
+__attribute__((naked)) void irq_entry() {
     __asm__ volatile(
-        "pushq %rax \n"
-        "pushq %rbx \n"
-        "pushq %rcx \n"
-        "pushq %rdx \n"
-        "pushq %rsi \n"
-        "pushq %rdi \n"
-        "pushq %rbp \n"
-        "pushq %r8  \n"
-        "pushq %r9  \n"
-        "pushq %r10 \n"
-        "pushq %r11 \n"
-        "pushq %r12 \n"
-        "pushq %r13 \n"
-        "pushq %r14 \n"
-        "pushq %r15 \n"
-        
-        "movq %rsp, %rdi \n"   // 传递 InterruptFrame* 给 C++ 处理函数
-        "call irqHandler \n"
-        
-        "popq %r15 \n"
-        "popq %r14 \n"
-        "popq %r13 \n"
-        "popq %r12 \n"
-        "popq %r11 \n"
-        "popq %r10 \n"
-        "popq %r9  \n"
-        "popq %r8  \n"
-        "popq %rbp \n"
-        "popq %rdi \n"
-        "popq %rsi \n"
-        "popq %rdx \n"
-        "popq %rcx \n"
-        "popq %rbx \n"
-        "popq %rax \n"
-        
-        "addq $16, %rsp \n"     // 弹出中断号 + 伪错误码
-        "iretq \n"              
+        "pushq %rax\n"
+        "pushq %rbx\n"
+        "pushq %rcx\n"
+        "pushq %rdx\n"
+        "pushq %rsi\n"
+        "pushq %rdi\n"
+        "pushq %rbp\n"
+        "pushq %r8\n"
+        "pushq %r9\n"
+        "pushq %r10\n"
+        "pushq %r11\n"
+        "pushq %r12\n"
+        "pushq %r13\n"
+        "pushq %r14\n"
+        "pushq %r15\n"
+        "movq %rsp, %rdi\n"
+        "call irqHandler\n"
+        "popq %r15\n"
+        "popq %r14\n"
+        "popq %r13\n"
+        "popq %r12\n"
+        "popq %r11\n"
+        "popq %r10\n"
+        "popq %r9\n"
+        "popq %r8\n"
+        "popq %rbp\n"
+        "popq %rdi\n"
+        "popq %rsi\n"
+        "popq %rdx\n"
+        "popq %rcx\n"
+        "popq %rbx\n"
+        "popq %rax\n"
+        "addq $16, %rsp\n"
+        "iretq\n"
     );
 }
-
 
 __attribute__((naked)) void irq_stub_timer() {
     __asm__ volatile(
-        "push $0 \n"             // 补齐错误码
-        "push $32 \n"            // 压入中断向量号 32
-        "jmp irq_common_asm \n"
+        "push $0\n"
+        "push $32\n"
+        "jmp irq_entry\n"
     );
 }
 
 void set_irqHandler(uint8_t vector, uint64_t handler_addr) {
-    if (vector < 32 || vector > 255) return; // 保护异常向量不被覆盖
+    if (vector < 32) return;
     idtSetGate(vector, handler_addr);
 }
 
-void idtInit() {
+void init_bsp() {
     memset(idt, 0, sizeof(idt));
 
+    for (int i = 0; i <= 32; i++)
+        idtSetGate(i, (uint64_t)isr_stub_generic);
+
     idtSetGate(0, (uint64_t)isr_stub_0);
+    idtSetGate(6, (uint64_t)isr_stub_6);
     idtSetGate(8, (uint64_t)isr_stub_8);
+    idtSetGate(9, (uint64_t)isr_stub_9);
+    idtSetGate(13, (uint64_t)isr_stub_13);
     idtSetGate(14, (uint64_t)isr_stub_14);
 
     set_irqHandler(apic::APIC_TIMER_VECTOR, (uint64_t)irq_stub_timer);
 
     idtPtr.limit = sizeof(idt) - 1;
     idtPtr.base = (uint64_t)&idt;
-    
-    __asm__ volatile ("lidt %0" : : "m"(idtPtr));
+
+    __asm__ volatile("lidt %0" : : "m"(idtPtr));
+
+    kout << "idt: IDT Loaded." << endl;
 }
 
 }

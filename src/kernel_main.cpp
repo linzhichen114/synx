@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
+#include <string.h>
 extern "C" {
 #include <limine.h>
 }
@@ -11,9 +12,18 @@ extern "C" {
 #include "mem/kmemory.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
-#include "mem/alloc.h"
 #include "apic/apic.h"
+#include "proc/ap_entry.h"
 
+
+/* Constants Definetion */
+extern uint64_t _kernel_stack_top;     // BSP Stack Top
+extern "C" void ap_entry(struct limine_mp_info*);
+#define AP_STACK_SIZE (16 * 1024)      // AP  Stack Size (16KB)
+uint64_t AP_TIMEOUT = 100000000ULL;
+bool scheduler_ready = false;
+extern uint64_t PER_CPU_DATA_SIZE;
+extern uint64_t PER_CPU_GP_OFFSET;
 
 /* Limine Requests */
 // Set the base revision to 6, this is recommended as this is the latest
@@ -46,6 +56,13 @@ volatile struct limine_hhdm_request hhdm_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_mp_request mp_request = {
+    .id = LIMINE_MP_REQUEST_ID,
+    .revision = 0,
+    .flags = 0 // 0 = xAPIC only; 1 = try x2APIC first
+};
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .cpp file, as seen fit.
 
@@ -67,9 +84,6 @@ static inline void __call_global_constructors() {
             (*func)();
 }
 
-// The following will be our kernel's entry point.
-// If renaming kernel_main() to something else, make sure to change the
-// linker script accordingly.
 extern "C" void kernel_main(void) {
 
     // Ensure the bootloader actually understands our base revision (see spec).
@@ -89,15 +103,14 @@ extern "C" void kernel_main(void) {
     const auto fb0 = framebuffer_request.response->framebuffers[0];
     kout << "fb0: Base " << (uint64_t*)fb0->address << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
     kout << "fb0: Mode " << fb0->width << "x" << fb0->height << " @ " << fb0->bpp << "bpp" << endl;
-    kout << "fb0: Color mode: ARGB" << endl;
+    kout << "fb0: Color mode: ARGB." << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
 
     // kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
 
-
-    gdtInit();
-    idt::idtInit();
+    gdt::init_bsp((uint64_t)&_kernel_stack_top);
+    idt::init_bsp();
 
     pmmInit();
     paging::init();
@@ -110,7 +123,89 @@ extern "C" void kernel_main(void) {
     apic::timer_init(32, true, 0);
     kout << "apic: Preemptive scheduling enabled." << endl;
 
+    apic::timer_stop();
+
+    kout << "smp(bsp): BSP Initialized Successfully, Starting SMP..." << endl;
+
+    if (mp_request.response == nullptr)
+        kernel_panic("smp(bsp): limine_mp_request.response is null!");
+
+
+    auto* resp = mp_request.response;
+    uint64_t cpu_count = resp->cpu_count;
+    uint64_t expected_aps = 0;
+
+    kout << "smp(bsp): Response valid at " << (uint64_t*)resp << endl;
+    kout << "smp(bsp): Detected " << cpu_count << " CPUs, BSP LAPIC ID: " 
+        << resp->bsp_lapic_id << endl;
+    kout << "smp(bsp): Flags: " << resp->flags
+        << ((resp->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC) ? " (x2APIC)" : " (xAPIC)")
+        << endl;
+
+    for (uint64_t i = 0; i < cpu_count; i++) {
+        auto* cpu = resp->cpus[i];
+        kout << "smp(bsp):   CPU[" << i << "] proc_id=" << cpu->processor_id 
+            << " lapic_id=" << cpu->lapic_id << endl;
+    }
+
+    if (cpu_count <= 1) {
+        kout << "smp(bsp): WARNING: Single core system, skipping SMP." << endl;
+        goto smp_skipping;
+    }
+
+    for (uint64_t i = 0; i < cpu_count; i++) {
+        struct limine_mp_info* cpu = resp->cpus[i];
+        
+        if (cpu->lapic_id == resp->bsp_lapic_id)
+            continue;
+        
+        void* raw_ptr = kmalloc(AP_STACK_SIZE);
+        if (!raw_ptr) 
+            kernel_panic("smp(bsp): Failed to allocate AP stack");
+        memset(raw_ptr, 0, AP_STACK_SIZE);
+        uint64_t virt_base = (uint64_t)raw_ptr;
+
+        uint64_t ap_stack_top = (virt_base + AP_STACK_SIZE) & ~0xFULL;
+
+        if ((ap_stack_top >> 48) != 0xFFFF || (ap_stack_top & 0xF) != 0)
+            kernel_panic("smp(bsp): Invalid AP stack top");
+
+        kout << "smp(bsp): Starting AP #" << cpu->lapic_id << ", stack=" << (uint64_t*)ap_stack_top  << " ..." << endl;
+
+        gdt::setup_descriptors(cpu->processor_id, ap_stack_top);
+
+        cpu->extra_argument = (uint64_t)ap_stack_top;
+
+        cpu->goto_address = (void (*)(limine_mp_info*))&ap_entry;
+        expected_aps++;
+    }
+
+    __atomic_thread_fence(__ATOMIC_SEQ_CST);
+
+    kout << "smp(bsp): Waiting for " << expected_aps << " APs to come online." << endl;
+    while (__atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) < expected_aps) {
+        asm volatile("pause");
+        if (--AP_TIMEOUT == 0) {
+            kout << "smp(bsp): WARNING: Timeout! " 
+                << __atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) 
+                << "/" << expected_aps << " APs online." << endl;
+            break;
+        }
+    }
+
+
+    kout << "smp(bsp): All " << expected_aps << " APs online, initializing scheduler." << endl;
+
+    // TODO: 在这里初始化调度器、为每个 CPU 创建 idle 任务
+    // scheduler::init();
+
+    __atomic_store_n(&scheduler_ready, true, __ATOMIC_RELEASE);
+
+    kout << "smp(bsp): Scheduler ready. System fully operational." << endl;
+
     asm volatile("sti");
 
-    kernel_panic("kernel_main: others function is not implemented yet - system halting.");
+smp_skipping:
+    asm volatile ("sti; hlt;");
+    //kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

@@ -47,5 +47,7 @@ void timer_oneshot(uint8_t vector, uint32_t initial_count);
 bool cpu_has_apic();
 bool cpu_has_tsc_deadline();
 
+void timer_stop();
+
 constexpr uint8_t APIC_TIMER_VECTOR = 32;
 } // namespace apic

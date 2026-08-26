@@ -140,7 +140,7 @@ void timer_init(uint8_t vector, bool periodic, uint32_t initial_count) {
     // 1. 先校准
     if (timer_ticks_per_ms == 0) {
         timer_ticks_per_ms = calibrate_timer();
-        // kout << "APIC Timer: " << timer_ticks_per_ms << " ticks/ms\n";
+        kout << "apic: " << timer_ticks_per_ms << " ticks/ms\n";
     }
 
     // 2. 设置分频

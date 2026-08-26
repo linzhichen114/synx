@@ -27,9 +27,8 @@ static inline void bitmap_clear(size_t bit) {
 }
 
 extern "C" void pmmInit() {
-    kout << "pmm: Initializing...\n";
+    kout << "pmm: Initializing..." << endl;
 
-    // 1. 计算总内存大小，确定位图需要多大
     uint64_t highest_addr = 0;
     for (size_t i = 0; i < memmap_request.response->entry_count; i++) {
         auto* entry = memmap_request.response->entries[i];
@@ -38,10 +37,8 @@ extern "C" void pmmInit() {
     }
 
     total_pages = highest_addr / PAGE_SIZE;
-    // 向上对齐到页边界，防止位图跨越页
     size_t bitmap_size = (total_pages / 8 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
 
-    // 2. 在 Limine 提供的可用内存中寻找一块空间来存放位图
     uint64_t bitmap_phys = 0;
     for (size_t i = 0; i < memmap_request.response->entry_count; i++) {
         auto* entry = memmap_request.response->entries[i];
@@ -56,41 +53,36 @@ extern "C" void pmmInit() {
 
     bitmap = bitmap_phys;
 
-    // 3. 初始化位图：默认将所有页标记为“已占用”（防止意外访问）
     uint8_t* bitmap_virt = (uint8_t*)phys_to_virt(bitmap);
     for (size_t i = 0; i < bitmap_size / 8; i++) {
         bitmap_virt[i] = 0xFF; 
     }
 
-    // 4. 遍历 Limine 内存映射，将 USABLE 的页标记为“空闲”
     free_pages = 0;
     for (size_t i = 0; i < memmap_request.response->entry_count; i++) {
         auto* entry = memmap_request.response->entries[i];
         if (entry->type == LIMINE_MEMMAP_USABLE) {
             for (uint64_t page = entry->base; page < entry->base + entry->length; page += PAGE_SIZE) {
-                // 【核心修复】：如果当前页正好是存放位图的页，跳过它！
-                if (page >= bitmap_phys && page < bitmap_phys + bitmap_size) {
+                if (page >= bitmap_phys && page < bitmap_phys + bitmap_size)
                     continue; 
-                }
                 bitmap_clear(page / PAGE_SIZE);
                 free_pages++;
             }
         }
     }
 
-    kout << "pmm: Total pages: " << total_pages << ", Free pages: " << free_pages << "\n";
+    kout << "pmm: Total pages: " << total_pages << ", Free pages: " << free_pages << endl;
 }
 
 extern "C" uint64_t pmm_allocPage() {
-    // 简单的线性扫描分配
     for (size_t i = 0; i < total_pages; i++) {
         if (!bitmap_get(i)) {
             bitmap_set(i);
             free_pages--;
-            return i * PAGE_SIZE; // 返回物理地址
+            return i * PAGE_SIZE; // phys
         }
     }
-    return 0; // 内存耗尽
+    return 0;
 }
 
 extern "C" void pmm_freePage(uint64_t phys_addr) {

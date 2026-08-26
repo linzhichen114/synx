@@ -55,7 +55,7 @@ extern "C" void kernel_panic(const char* message) {
     // 关闭中断，防止在 Panic 时被打断
     asm volatile ("cli");
 
-    kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---\n";
+    kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---" << endl;
     kout << "CPU: 0 " << KERNEL_NAME << " " << KERNEL_VERSION << endl;
 
     // 获取当前的 RIP RBP 并打印完整的调用栈
@@ -64,7 +64,7 @@ extern "C" void kernel_panic(const char* message) {
     uint64_t current_rip = getRip();
     printStackTrace(current_rbp, current_rip);
 
-    kout << "\n--- [ end Kernel panic ] ---\n";
+    kout << "\n--- [ end Kernel panic ] ---" << endl;
 
     // Halt and catch fire
     for (;;) {

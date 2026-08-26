@@ -2,14 +2,86 @@
 #include "kprint.h"
 #include <string.h>
 
-static uint64_t _kernel_stack_top;
-static GDTEntry gdt[7];
-static GDTPtr   gp;
-static TSSEntry tss;
+extern "C" {
+    gdt::PerCpuData per_cpu_data[MAX_CPUS];
+    uint64_t PER_CPU_DATA_SIZE = sizeof(gdt::PerCpuData);
+    uint64_t PER_CPU_GP_OFFSET = __builtin_offsetof(gdt::PerCpuData, gp);
+}
 
-void loadGdt() {
+namespace gdt {
+extern uint64_t _kernel_stack_top;
+
+void setup_descriptors(uint32_t cpu_id, uint64_t stack_top) {
+    auto& cpu = per_cpu_data[cpu_id];
+
+    memset(&cpu.tss, 0, sizeof(TSSEntry));
+    cpu.tss.rsp0 = stack_top;
+    cpu.tss.iopbBase = sizeof(TSSEntry);
+
+    // ---- GDT[0]: Null Descriptor ----
+    memset(&cpu.gdt[0], 0, sizeof(GDTEntry));
+
+    // ---- GDT[1]: Ring 0 Code (64-bit) ----
+    cpu.gdt[1].limit_low   = 0xFFFF;
+    cpu.gdt[1].base_low    = 0;
+    cpu.gdt[1].base_middle = 0;
+    cpu.gdt[1].access      = 0x9A; // P=1, DPL=0, S=1, Type=Execute/Read
+    cpu.gdt[1].granularity = 0xAF; // G=1, L=1(64-bit), Limit[19:16]=0xF
+    cpu.gdt[1].base_high   = 0;
+
+    // ---- GDT[2]: Ring 0 Data ----
+    cpu.gdt[2].limit_low   = 0xFFFF;
+    cpu.gdt[2].base_low    = 0;
+    cpu.gdt[2].base_middle = 0;
+    cpu.gdt[2].access      = 0x92; // P=1, DPL=0, S=1, Type=Read/Write
+    cpu.gdt[2].granularity = 0xCF; // G=1, D/B=1, Limit[19:16]=0xF
+    cpu.gdt[2].base_high   = 0;
+
+    // ---- GDT[3]: Ring 3 Code (64-bit) ----
+    cpu.gdt[3].limit_low   = 0xFFFF;
+    cpu.gdt[3].base_low    = 0;
+    cpu.gdt[3].base_middle = 0;
+    cpu.gdt[3].access      = 0xFA; // P=1, DPL=3, S=1, Type=Execute/Read
+    cpu.gdt[3].granularity = 0xAF;
+    cpu.gdt[3].base_high   = 0;
+
+    // ---- GDT[4]: Ring 3 Data ----
+    cpu.gdt[4].limit_low   = 0xFFFF;
+    cpu.gdt[4].base_low    = 0;
+    cpu.gdt[4].base_middle = 0;
+    cpu.gdt[4].access      = 0xF2; // P=1, DPL=3, S=1, Type=Read/Write
+    cpu.gdt[4].granularity = 0xCF;
+    cpu.gdt[4].base_high   = 0;
+
+    // ---- GDT[5..6]: TSS Descriptor (16 bytes, occupies 2 slots) ----
+    uint64_t tss_base = (uint64_t)&cpu.tss;
+    uint32_t limit = sizeof(TSSEntry) - 1;
+
+    // GDT[5]
+    cpu.gdt[5].limit_low   = limit & 0xFFFF;
+    cpu.gdt[5].base_low    = tss_base & 0xFFFF;
+    cpu.gdt[5].base_middle = (tss_base >> 16) & 0xFF;
+    cpu.gdt[5].access      = 0x89; // P=1, DPL=0, S=0, Type=Available 64-bit TSS
+    cpu.gdt[5].granularity = ((limit >> 16) & 0x0F) | (((tss_base >> 24) & 0xFF) << 4);
+    cpu.gdt[5].base_high   = 0;    // REVERSED
+
+    // GDT[6], TSS base[63:32]
+    cpu.gdt[6].limit_low   = (tss_base >> 32) & 0xFFFF;
+    cpu.gdt[6].base_low    = (tss_base >> 48) & 0xFFFF;
+    cpu.gdt[6].base_middle = 0;
+    cpu.gdt[6].access      = 0;
+    cpu.gdt[6].granularity = 0;
+    cpu.gdt[6].base_high   = 0;
+
+    cpu.gp.limit = sizeof(cpu.gdt) - 1;
+    cpu.gp.base  = (uint64_t)&cpu.gdt;
+}
+
+static void load_gdt_and_tss(uint32_t cpu_id) {
+    auto& cpu = per_cpu_data[cpu_id];
+
     __asm__ volatile (
-        "lgdt %[GDTPtr]\n"
+        "lgdt %[gdtptr]\n"
         "mov $0x10, %%ax\n"
         "mov %%ax, %%ds\n"
         "mov %%ax, %%es\n"
@@ -21,125 +93,36 @@ void loadGdt() {
         "push %%rax\n"
         "lretq\n"
         "1:\n"
-        :
-        : [GDTPtr] "m"(gp)
-        : "rax", "memory"
-    );
-}
 
-void loadTss() {
-    __asm__ volatile (
-        "mov $0x28, %%rax\n"
+        "mov $0x28, %%ax\n"
         "ltr %%ax\n"
-        : 
-        : 
+
+        :
+        : [gdtptr] "m"(cpu.gp)
         : "rax", "memory"
     );
 }
 
-void tssInit(uint64_t kStackTop) {
-    kout << "gdt: Creating TSS Descriptor:" << endl;
-
-    // 1. 将 TSS 清零
-    memset(&tss, 0, sizeof(struct TSSEntry));
-
-    // 2. 设置 Ring 0 栈指针
-    kout << "gdt:   Setting RSP0... (Kernel Stack Top: " << (uint64_t*)kStackTop << ")" << endl;
-    tss.rsp0 = kStackTop;
-
-    // 3. 设置 I/O 权限位图基址
-    kout << "gdt:   Setting I/O Permission Bitmap Base Address..." << endl;
-    tss.iopbBase = sizeof(struct TSSEntry);
-
-    uint64_t tss_base = (uint64_t) &tss;
-    uint32_t limit    = sizeof(struct TSSEntry) - 1; // 103
-
-    // 低 8 字节描述符（索引 5）
-    kout << "gdt:   Writing Low 8 Bytes Descriptor (Index 5)..." << endl;
-    gdt[5].limit_low = limit & 0xFFFF;
-    gdt[5].base_low = tss_base & 0xFFFF;
-    gdt[5].base_middle = (tss_base >> 16) & 0xFF;
-    gdt[5].access = 0x89;      // Present=1, DPL=0, S=0, Type=1001 (Available 64-bit TSS)
-    gdt[5].granularity = ((limit >> 16) & 0x0F) | ((tss_base >> 24) & 0xFF);
-
-    // 高 8 字节描述符（索引 6）
-    kout << "gdt:   Writing High 8 Bytes Descriptor (Index 6)..." << endl;
-    gdt[6].limit_low = (tss_base >> 32) & 0xFFFF;
-    gdt[6].base_low = (tss_base >> 48) & 0xFFFF;
-    gdt[6].base_middle = 0;
-    gdt[6].access = 0;
-    gdt[6].granularity = 0;
-
-    kout << "gdt: - All Done." << endl;
+void init_bsp(uint64_t stack_top) {
+    kout << "gdt: Initializing BSP (CPU 0) GDT & TSS..." << endl;
+    kout << "gdt:   Stack Top: " << (uint64_t*)stack_top << endl;
+    setup_descriptors(0, stack_top);
+    load_gdt_and_tss(0);
+    kout << "gdt: BSP GDT & TSS loaded successfully." << endl;
 }
 
-void gdtInit() {
+void init_ap(uint32_t cpu_id, uint64_t stack_top) {
+    setup_descriptors(cpu_id, stack_top);
+    asm volatile("mov $0x28, %%ax; ltr %%ax" ::: "rax", "memory");
+}
 
-    kout << "gdt: Initlizing GDT & TSS..." << endl;
+PerCpuData* get_cpu_data(uint32_t cpu_id) {
+    if (cpu_id >= MAX_CPUS) return nullptr;
+    return &per_cpu_data[cpu_id];
+}
 
-    // null descriptor
-    kout << "gdt: Creating null descriptor... ";
-    gdt[0].limit_low   = 0;
-    gdt[0].base_low    = 0;
-    gdt[0].base_middle = 0;
-    gdt[0].access      = 0;
-    gdt[0].granularity = 0;
-    gdt[0].base_high   = 0;
-    kout << "done" << endl;
+} // namespace gdt
 
-    // ring 0 code
-    kout << "gdt: Creating Ring 0 Code descriptor... ";
-    gdt[1].limit_low   = 0xFFFF;
-    gdt[1].base_low    = 0;
-    gdt[1].base_middle = 0;
-    gdt[1].access      = 0x9A; // Present=1, DPL=0, Type=Code, Readable
-    gdt[1].granularity = 0xAF; // Granularity=1(4KB), 32-bit/64-bit(L=1), Limit High
-    gdt[1].base_high   = 0;
-    kout << "done" << endl;
-
-    // ring 0 data
-    kout << "gdt: Creating Ring 0 Data descriptor... ";
-    gdt[2].limit_low   = 0xFFFF;
-    gdt[2].base_low    = 0;
-    gdt[2].base_middle = 0;
-    gdt[2].access      = 0x92; // Present=1, DPL=0, Type=Data, Writable
-    gdt[2].granularity = 0xCF; // Granularity=1(4KB), 32-bit, Limit High
-    gdt[2].base_high   = 0;
-    kout << "done" << endl;
-
-    // ring 3 code 
-    kout << "gdt: Creating Ring 3 Code descriptor... ";
-    gdt[3].limit_low   = 0xFFFF;
-    gdt[3].base_low    = 0;
-    gdt[3].base_middle = 0;
-    gdt[3].access      = 0xFA; // Present=1, DPL=0, Type=Data, Writable
-    gdt[3].granularity = 0xAF; // Granularity=1(4KB), 32-bit, Limit High
-    gdt[3].base_high   = 0;
-    kout << "done" << endl;
-
-    // ring 3 data
-    kout << "gdt: Creating Ring 3 Data descriptor... ";
-    gdt[4].limit_low   = 0xFFFF;
-    gdt[4].base_low    = 0;
-    gdt[4].base_middle = 0;
-    gdt[4].access      = 0xF2; // Present=1, DPL=0, Type=Data, Writable
-    gdt[4].granularity = 0xCF; // Granularity=1(4KB), 32-bit, Limit High
-    gdt[4].base_high   = 0;
-    kout << "done" << endl;
-
-    // TSS descriptor
-    tssInit((uint64_t)&_kernel_stack_top);
-
-    // load GDT & TSS
-    kout << "gdt: Loading GDT...";
-    gp.limit = sizeof(gdt) - 1;
-    gp.base = (uint64_t)&gdt;
-    loadGdt();
-    kout << "done" << endl;
-    kout << "gdt: Loading TSS...";
-    loadTss();
-    kout << "done" << endl;
-
-    kout << "gdt: Sussessfully initlized GDT & TSS." << endl;
-
+extern "C" gdt::PerCpuData* __gdt_get_per_cpu_data() {
+    return per_cpu_data;
 }

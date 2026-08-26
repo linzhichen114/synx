@@ -10,6 +10,8 @@ extern volatile struct limine_framebuffer_request framebuffer_request;
 namespace kprint {
 
 ostreamk __kout(0x00FFFFFF, 0x00000000); 
+lock::SpinLock __kprint_lock;
+__kprint_locked __locked_kout;
 
 namespace {
     // 全局光标状态
