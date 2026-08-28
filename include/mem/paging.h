@@ -15,11 +15,13 @@ typedef struct {
     pte_t entries[PAGE_TABLE_ENTRIES];
 } __attribute__((aligned(4096))) page_table_t;
 
-
+extern const uint64_t LAPIC_VIRT_BASE;
 extern page_table_t* pml4_base;
 
 extern "C" void init();
 void map_page(uint64_t virt, uint64_t phys, uint64_t flags);
+
+void map_lapic(uint64_t phys_base);
 }
 
 uint64_t mmap_mmio(uint64_t phys_addr, uint64_t size);

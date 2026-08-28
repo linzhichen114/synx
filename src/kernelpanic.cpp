@@ -2,9 +2,10 @@
 #include "kprint.h"
 #include "kallsyms.h"
 #include "sysdef.h"
+#include "proc/cpuid.h"
+#include "apic/apic.h"
 
 
-// 获取当前 RIP
 static inline uint64_t getRip() {
     uint64_t rip;
     asm volatile ("lea 0(%%rip), %0" : "=r"(rip));
@@ -27,22 +28,18 @@ extern "C" void printSymbol(uint64_t addr) {
 static void printStackTrace(uint64_t rbp, uint64_t rip) {
     kout << "\nCall Trace:\n";
     
-    // 打印触发异常时的当前 RIP
-    kout << " [<" << (uint64_t*)rip << ">] ";
+    kout << " [<" << (uint64_t*)rip << ">] ? ";
     printSymbol(rip);
     kout << "\n";
 
-    // 沿着 RBP 链向上回溯
     while (rbp != 0 && rbp >= 0xffff800000000000ULL) {
-        // 安全检查：确保 rbp 是 8 字节对齐的
         if (rbp & 7) break; 
 
         uint64_t ret_addr = *(uint64_t*)(rbp + 8);
         
-        // 如果返回地址为 0，说明已经到了栈底
         if (ret_addr == 0) break;
         
-        kout << " [<" << (uint64_t*)ret_addr << ">] ";
+        kout << " [<" << (uint64_t*)ret_addr << ">] ? ";
         printSymbol(ret_addr);
         kout << "\n";
         
@@ -52,13 +49,12 @@ static void printStackTrace(uint64_t rbp, uint64_t rip) {
 }
 
 extern "C" void kernel_panic(const char* message) {
-    // 关闭中断，防止在 Panic 时被打断
     asm volatile ("cli");
 
     kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---" << endl;
-    kout << "CPU: 0 " << KERNEL_NAME << " " << KERNEL_VERSION << endl;
+    char vendor_string[13]; cpuid::vendor_string(vendor_string);
+    kout << "CPU: " << get_lapic_id() << " " << KERNEL_NAME << " Hardware: " << vendor_string << " " << KERNEL_VERSION << endl;
 
-    // 获取当前的 RIP RBP 并打印完整的调用栈
     uint64_t current_rbp;
     asm volatile ("mov %%rbp, %0" : "=r"(current_rbp));
     uint64_t current_rip = getRip();

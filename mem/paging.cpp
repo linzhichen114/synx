@@ -6,9 +6,6 @@
 #include "kprint.h"
 
 
-paging::page_table_t* pml4_base = nullptr;
-
-// 获取虚拟地址各级页表的索引
 #define PGD_INDEX(va) (((va) >> 39) & 0x1FF)
 #define PUD_INDEX(va) (((va) >> 30) & 0x1FF)
 #define PMD_INDEX(va) (((va) >> 21) & 0x1FF)
@@ -19,6 +16,7 @@ constexpr uint64_t MMIO_FLAGS = 0x03 | (1ULL << 4) | (1ULL << 3); // 0x1B
 namespace paging {
 
 page_table_t* pml4_base = nullptr;
+const uint64_t LAPIC_VIRT_BASE = 0xFFFFFFFFFFE00000ULL;
 
 extern "C" void init() {
     kout << "vmm: Initallizing..." << endl;
@@ -63,12 +61,19 @@ void map_page(uint64_t virt, uint64_t phys, uint64_t flags) {
     pt->entries[pte_idx] = phys | flags;
 }
 
+void map_lapic(uint64_t phys_base) {
+    constexpr uint64_t LAPIC_FLAGS = PTE_PRESENT | PTE_WRITABLE | 0x1B;
+    
+    paging::map_page(LAPIC_VIRT_BASE, phys_base & ~0xFFFULL, LAPIC_FLAGS);
+    
+    asm volatile("mov %%cr3, %%rax\n mov %%rax, %%cr3" ::: "rax", "memory");
+}
+
 }
 
 uint64_t mmap_mmio(uint64_t phys_addr, uint64_t size) {
     uint64_t virt_addr = phys_addr + hhdm_request.response->offset;
 
-    // 按页对齐并逐页映射
     uint64_t aligned_phys = phys_addr & ~0xFFFULL;
     uint64_t offset_in_page = phys_addr & 0xFFFULL;
     uint64_t total_size = size + offset_in_page;
@@ -80,8 +85,6 @@ uint64_t mmap_mmio(uint64_t phys_addr, uint64_t size) {
             MMIO_FLAGS
         );
     }
-
-    // 刷新 TLB
     asm volatile("mov %%cr3, %%rax\n mov %%rax, %%cr3" ::: "rax", "memory");
 
     return virt_addr;

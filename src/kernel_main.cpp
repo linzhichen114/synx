@@ -14,6 +14,7 @@ extern "C" {
 #include "mem/heap.h"
 #include "apic/apic.h"
 #include "proc/ap_entry.h"
+#include "proc/sched.h"
 
 
 /* Constants Definetion */
@@ -72,7 +73,8 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-/* Constructors Initalizing */
+/* Tool Functions */
+/* Constructors Calling */
 typedef void (*init_func_t)();
 
 extern "C" init_func_t __init_array_start[];
@@ -83,6 +85,19 @@ static inline void __call_global_constructors() {
         if (*func)
             (*func)();
 }
+
+/* Check Page Tables */
+// void validate_page_tables() {
+//     for (each mapped page) {
+//         uint64_t pte = read_pte(addr);
+//         if (pte & 0x0000000000000E00ULL) {  // bits 9-11
+//             kout << "BAD PTE at " << hex << addr << ": " << pte << endl;
+//         }
+//         if (pte & 0x7FF0000000000000ULL) {  // bits 52-62  
+//             kout << "BAD PTE HIGH BITS at " << hex << addr << ": " << pte << endl;
+//         }
+//     }
+// }
 
 extern "C" void kernel_main(void) {
 
@@ -123,33 +138,33 @@ extern "C" void kernel_main(void) {
     apic::timer_init(32, true, 0);
     kout << "apic: Preemptive scheduling enabled." << endl;
 
-    apic::timer_stop();
+    // apic::timer_stop();
 
-    kout << "smp(bsp): BSP Initialized Successfully, Starting SMP..." << endl;
+    kout << "smp: BSP Initialized Successfully, Starting SMP..." << endl;
 
     if (mp_request.response == nullptr)
-        kernel_panic("smp(bsp): limine_mp_request.response is null!");
+        kernel_panic("smp: limine_mp_request.response is null!");
 
 
     auto* resp = mp_request.response;
     uint64_t cpu_count = resp->cpu_count;
     uint64_t expected_aps = 0;
 
-    kout << "smp(bsp): Response valid at " << (uint64_t*)resp << endl;
-    kout << "smp(bsp): Detected " << cpu_count << " CPUs, BSP LAPIC ID: " 
+    kout << "smp: Limine MP Response valid at " << (uint64_t*)resp << endl;
+    kout << "smp: Detected " << cpu_count << " CPUs, BSP LAPIC ID: " 
         << resp->bsp_lapic_id << endl;
-    kout << "smp(bsp): Flags: " << resp->flags
+    kout << "smp: Flags: " << resp->flags
         << ((resp->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC) ? " (x2APIC)" : " (xAPIC)")
         << endl;
 
     for (uint64_t i = 0; i < cpu_count; i++) {
         auto* cpu = resp->cpus[i];
-        kout << "smp(bsp):   CPU[" << i << "] proc_id=" << cpu->processor_id 
+        kout << "smp:   CPU[" << i << "] proc_id=" << cpu->processor_id 
             << " lapic_id=" << cpu->lapic_id << endl;
     }
 
     if (cpu_count <= 1) {
-        kout << "smp(bsp): WARNING: Single core system, skipping SMP." << endl;
+        kout << "smp: WARNING: Single core system, skipping SMP." << endl;
         goto smp_skipping;
     }
 
@@ -161,16 +176,16 @@ extern "C" void kernel_main(void) {
         
         void* raw_ptr = kmalloc(AP_STACK_SIZE);
         if (!raw_ptr) 
-            kernel_panic("smp(bsp): Failed to allocate AP stack");
+            kernel_panic("smp: Failed to allocate AP stack");
         memset(raw_ptr, 0, AP_STACK_SIZE);
         uint64_t virt_base = (uint64_t)raw_ptr;
 
         uint64_t ap_stack_top = (virt_base + AP_STACK_SIZE) & ~0xFULL;
 
         if ((ap_stack_top >> 48) != 0xFFFF || (ap_stack_top & 0xF) != 0)
-            kernel_panic("smp(bsp): Invalid AP stack top");
+            kernel_panic("smp: Invalid AP stack top");
 
-        kout << "smp(bsp): Starting AP #" << cpu->lapic_id << ", stack=" << (uint64_t*)ap_stack_top  << " ..." << endl;
+        kout << "smp: Starting AP #" << cpu->lapic_id << ", stack=" << (uint64_t*)ap_stack_top  << " ..." << endl;
 
         gdt::setup_descriptors(cpu->processor_id, ap_stack_top);
 
@@ -182,11 +197,11 @@ extern "C" void kernel_main(void) {
 
     __atomic_thread_fence(__ATOMIC_SEQ_CST);
 
-    kout << "smp(bsp): Waiting for " << expected_aps << " APs to come online." << endl;
+    kout << "smp: Waiting for " << expected_aps << " APs to come online ..." << endl;
     while (__atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) < expected_aps) {
         asm volatile("pause");
         if (--AP_TIMEOUT == 0) {
-            kout << "smp(bsp): WARNING: Timeout! " 
+            kout << "smp: WARNING: Timeout! Now " 
                 << __atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) 
                 << "/" << expected_aps << " APs online." << endl;
             break;
@@ -194,18 +209,16 @@ extern "C" void kernel_main(void) {
     }
 
 
-    kout << "smp(bsp): All " << expected_aps << " APs online, initializing scheduler." << endl;
+    kout << "smp: All " << expected_aps << " APs online, initializing scheduler." << endl;
 
-    // TODO: 在这里初始化调度器、为每个 CPU 创建 idle 任务
-    // scheduler::init();
+smp_skipping:
+
+    scheduler::init();
 
     __atomic_store_n(&scheduler_ready, true, __ATOMIC_RELEASE);
 
-    kout << "smp(bsp): Scheduler ready. System fully operational." << endl;
-
     asm volatile("sti");
 
-smp_skipping:
-    asm volatile ("sti; hlt;");
+    asm volatile ("sti; hlt; jmp .-2" ::: "memory");
     //kernel_panic("kernel_main: others function is not implemented yet - system halting.");
 }

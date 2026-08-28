@@ -4,7 +4,6 @@
 # void switch_context(scheduler::CpuContext* old_ctx, const scheduler::CpuContext* new_ctx);
 #   %rdi = old_ctx, %rsi = new_ctx
 switch_context:
-    # 保存旧任务的 callee-saved 寄存器到 old_ctx
     movq %rbx, 0x08(%rdi)
     movq %rbp, 0x28(%rdi)
     movq %r12, 0x30(%rdi)
@@ -13,7 +12,6 @@ switch_context:
     movq %r15, 0x48(%rdi)
     movq %rsp, 0x50(%rdi)
 
-    # 从 new_ctx 恢复新任务的 callee-saved 寄存器
     movq 0x08(%rsi), %rbx
     movq 0x28(%rsi), %rbp
     movq 0x30(%rsi), %r12

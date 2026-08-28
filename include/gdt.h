@@ -1,10 +1,11 @@
 #pragma once
+#include "proc/sched.h"
 #include <stdint.h>
 
-namespace gdt {
 
-// 最大支持的 CPU 核心数
 #define MAX_CPUS 256
+
+namespace gdt {
 
 struct GDTEntry {
     uint16_t limit_low;

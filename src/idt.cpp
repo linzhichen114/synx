@@ -1,4 +1,5 @@
 #include "idt.h"
+#include "gdt.h"
 #include "kprint.h"
 #include <string.h>
 #include "sysdef.h"
@@ -71,15 +72,17 @@ extern "C" void irqHandler(InterruptFrame* frame) {
     uint8_t vector = frame->int_no;
 
     switch (vector) {
-        case apic::APIC_TIMER_VECTOR:
+        case apic::APIC_TIMER_VECTOR: {
             apic::send_eoi();
             scheduler::schedule();
             break;
-        default:
+        }
+        default: {
             kout << "idt: WARNING: Unhandled IRQ, vector \""
                  << vector << "\"." << endl;
             apic::send_eoi();
             break;
+        }
     }
 }
 

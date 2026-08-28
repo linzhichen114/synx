@@ -4,7 +4,7 @@
 
 struct ApStartupInfo {
     uint32_t lapic_id;
-    uint64_t stack_top; // 该 AP 专属栈顶
+    uint64_t stack_top;
 };
 
 extern volatile uint64_t ap_online_count;

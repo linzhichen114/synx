@@ -1,9 +1,11 @@
 #pragma once
+#include "limine.h"
 #include <stdint.h>
 
 namespace apic {
 
-// APIC 寄存器偏移（MMIO）
+extern volatile uint32_t* apic_mmio_base;
+
 enum class Reg : uint16_t {
     APIC_ID         = 0x020,
     APIC_VERSION    = 0x030,
@@ -13,24 +15,24 @@ enum class Reg : uint16_t {
     ICR_LOW         = 0x300,  // Interrupt Command (低32位)
     ICR_HIGH        = 0x310,  // Interrupt Command (高32位)
     
-    // Timer 相关
     LVT_TIMER       = 0x320,  // Timer Local Vector Table Entry
     TIMER_INIT_CNT  = 0x380,  // Timer Initial Count
     TIMER_CUR_CNT   = 0x390,  // Timer Current Count
     TIMER_DIVIDE    = 0x3E0,  // Timer Divide Configuration
 };
 
-// MSR 地址
 constexpr uint32_t IA32_APIC_BASE_MSR = 0x1B;
 
-// APIC Base MSR 标志位
 constexpr uint64_t APIC_BASE_ENABLE   = (1ULL << 11);
-constexpr uint64_t APIC_BASE_GLOBAL   = (1ULL << 10); // x2APIC 模式
+constexpr uint64_t APIC_BASE_GLOBAL   = (1ULL << 10);
 constexpr uint64_t APIC_BASE_BSP      = (1ULL << 8);
 
+constexpr uint8_t APIC_TIMER_VECTOR = 32;
+
+
 struct ApicBaseInfo {
-    uint64_t mmio_base;  // MMIO 映射基地址（虚拟地址）
-    bool is_bsp;         // 当前 CPU 是否是 BSP
+    uint64_t mmio_base;
+    bool is_bsp;
 };
 
 void init();
@@ -39,15 +41,30 @@ uint32_t read_reg(Reg reg);
 void write_reg(Reg reg, uint32_t val);
 void send_eoi();
 
-// Timer 相关
 void timer_init(uint8_t vector, bool periodic, uint32_t initial_count);
 void timer_oneshot(uint8_t vector, uint32_t initial_count);
 
-// CPUID 检测
 bool cpu_has_apic();
 bool cpu_has_tsc_deadline();
 
 void timer_stop();
 
-constexpr uint8_t APIC_TIMER_VECTOR = 32;
+constexpr uint64_t LAPIC_BASE = 0xFEE00000;
+constexpr uint32_t LAPIC_ID_REG = 0x20;
+
 } // namespace apic
+
+static inline uint32_t lapic_read(uint32_t reg) {
+    return *(volatile uint32_t*)(apic::LAPIC_BASE + reg);
+}
+
+inline uint32_t get_lapic_id() {
+    if (!apic::apic_mmio_base) {
+        extern volatile struct ::limine_hhdm_request hhdm_request;
+        // init() 还没调用时的安全回退
+        uint64_t hhdm_offset = hhdm_request.response->offset;
+        volatile uint32_t* id_reg = (volatile uint32_t*)(apic::LAPIC_BASE + hhdm_offset + apic::LAPIC_ID_REG);
+        return (*id_reg >> 24) & 0xFF;
+    }
+    return (read_reg(apic::Reg::APIC_ID) >> 24) & 0xFF;
+}

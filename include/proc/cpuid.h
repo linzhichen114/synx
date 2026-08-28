@@ -26,7 +26,6 @@ inline Result query(uint32_t leaf, uint32_t subleaf = 0) {
 /// 获取处理器厂商字符串
 inline void vendor_string(char out[13]) {
     Result r = query(0);
-    // 注意：EBX-EDX-ECX 的顺序是 Intel/AMD 规范定义的
     uint32_t* p = reinterpret_cast<uint32_t*>(out);
     p[0] = r.ebx;
     p[1] = r.edx;
