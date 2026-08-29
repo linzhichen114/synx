@@ -6,6 +6,7 @@
 #include "kallsyms.h"
 #include "proc/sched.h"
 #include "apic/apic.h"
+#include "ps2_keyboard.h"
 
 idt::IDTPtr idtPtr;
 
@@ -70,6 +71,9 @@ extern "C" void exceptionHandler(InterruptFrame* frame, uint64_t error_code) {
 
 extern "C" void irqHandler(InterruptFrame* frame) {
     uint8_t vector = frame->int_no;
+    if (vector == ps2::PS2_KEYBOARD_VECTOR) {
+        kout << "[KBD IRQ]" << endl; 
+    }
 
     switch (vector) {
         case apic::APIC_TIMER_VECTOR: {
@@ -77,9 +81,22 @@ extern "C" void irqHandler(InterruptFrame* frame) {
             scheduler::schedule();
             break;
         }
+        case ps2::PS2_KEYBOARD_VECTOR: {
+            uint8_t status = inb(ps2::STATUS_PORT);
+            if (!(status & ps2::STATUS_OUTPUT_FULL)) {
+                kout << "idt: (IRQ 1) Spurious interruption signal detected, ignored.";
+                apic::send_eoi();
+                break;
+            }
+
+            uint8_t data = inb(ps2::DATA_PORT);
+            ps2::decode_and_push(data);
+            apic::send_eoi();
+            break;
+        }
         default: {
-            kout << "idt: WARNING: Unhandled IRQ, vector \""
-                 << vector << "\"." << endl;
+            kout << "idt: WARNING: Unhandled IRQ, vector "
+                 << vector << "." << endl;
             apic::send_eoi();
             break;
         }
@@ -245,10 +262,18 @@ __attribute__((naked)) void irq_entry() {
     );
 }
 
-__attribute__((naked)) void irq_stub_timer() {
+__attribute__((naked)) void irq_stub_0() {
     __asm__ volatile(
         "push $0\n"
         "push $32\n"
+        "jmp irq_entry\n"
+    );
+}
+
+__attribute__((naked)) void irq_stub_1() {
+    __asm__ volatile(
+        "push $0\n"
+        "push $33\n"
         "jmp irq_entry\n"
     );
 }
@@ -264,14 +289,15 @@ void init_bsp() {
     for (int i = 0; i <= 32; i++)
         idtSetGate(i, (uint64_t)isr_stub_generic);
 
-    idtSetGate(0, (uint64_t)isr_stub_0);
-    idtSetGate(6, (uint64_t)isr_stub_6);
-    idtSetGate(8, (uint64_t)isr_stub_8);
-    idtSetGate(9, (uint64_t)isr_stub_9);
+    idtSetGate(0,  (uint64_t)isr_stub_0);
+    idtSetGate(6,  (uint64_t)isr_stub_6);
+    idtSetGate(8,  (uint64_t)isr_stub_8);
+    idtSetGate(9,  (uint64_t)isr_stub_9);
     idtSetGate(13, (uint64_t)isr_stub_13);
     idtSetGate(14, (uint64_t)isr_stub_14);
 
-    set_irqHandler(apic::APIC_TIMER_VECTOR, (uint64_t)irq_stub_timer);
+    set_irqHandler(apic::APIC_TIMER_VECTOR,  (uint64_t)irq_stub_0);
+    set_irqHandler(ps2::PS2_KEYBOARD_VECTOR, (uint64_t)irq_stub_1);
 
     idtPtr.limit = sizeof(idt) - 1;
     idtPtr.base = (uint64_t)&idt;

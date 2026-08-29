@@ -12,19 +12,23 @@ extern "C" {
 #include "mem/kmemory.h"
 #include "mem/paging.h"
 #include "mem/heap.h"
+#include "mem/slab.h"
 #include "apic/apic.h"
 #include "proc/ap_entry.h"
 #include "proc/sched.h"
+#include "apic/ioapic.h"
+#include "ps2_keyboard.h"
 
 
 /* Constants Definetion */
-extern uint64_t _kernel_stack_top;     // BSP Stack Top
-extern "C" void ap_entry(struct limine_mp_info*);
-#define AP_STACK_SIZE (16 * 1024)      // AP  Stack Size (16KB)
-uint64_t AP_TIMEOUT = 100000000ULL;
-bool scheduler_ready = false;
+extern uint64_t _kernel_stack_top;
 extern uint64_t PER_CPU_DATA_SIZE;
 extern uint64_t PER_CPU_GP_OFFSET;
+
+extern "C" void ap_entry(struct limine_mp_info*);
+const uint8_t AP_STACK_SIZE = (16 * 1024);
+uint64_t AP_TIMEOUT = 100000000ULL;
+bool scheduler_ready = false;
 
 /* Limine Requests */
 // Set the base revision to 6, this is recommended as this is the latest
@@ -73,7 +77,6 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-/* Tool Functions */
 /* Constructors Calling */
 typedef void (*init_func_t)();
 
@@ -85,19 +88,6 @@ static inline void __call_global_constructors() {
         if (*func)
             (*func)();
 }
-
-/* Check Page Tables */
-// void validate_page_tables() {
-//     for (each mapped page) {
-//         uint64_t pte = read_pte(addr);
-//         if (pte & 0x0000000000000E00ULL) {  // bits 9-11
-//             kout << "BAD PTE at " << hex << addr << ": " << pte << endl;
-//         }
-//         if (pte & 0x7FF0000000000000ULL) {  // bits 52-62  
-//             kout << "BAD PTE HIGH BITS at " << hex << addr << ": " << pte << endl;
-//         }
-//     }
-// }
 
 extern "C" void kernel_main(void) {
 
@@ -127,7 +117,7 @@ extern "C" void kernel_main(void) {
     gdt::init_bsp((uint64_t)&_kernel_stack_top);
     idt::init_bsp();
 
-    pmmInit();
+    pmm::init();
     paging::init();
     heapInit();
     
@@ -135,10 +125,12 @@ extern "C" void kernel_main(void) {
     apic::init();
     kout << "apic: Initialized, Base: " << apic::get_base_info().mmio_base << endl;
 
-    apic::timer_init(32, true, 0);
-    kout << "apic: Preemptive scheduling enabled." << endl;
+    ioapic::init(0xFEC00000);
+    kout << "ioapic: Initialized, all IRQs masked." << endl;
 
-    // apic::timer_stop();
+    apic::timer_init(32, true, 0);
+    kout << "apic: (Timer) Preemptive scheduling enabled." << endl;
+
 
     kout << "smp: BSP Initialized Successfully, Starting SMP..." << endl;
 
@@ -159,8 +151,8 @@ extern "C" void kernel_main(void) {
 
     for (uint64_t i = 0; i < cpu_count; i++) {
         auto* cpu = resp->cpus[i];
-        kout << "smp:   CPU[" << i << "] proc_id=" << cpu->processor_id 
-            << " lapic_id=" << cpu->lapic_id << endl;
+        kout << "smp:   CPU " << i << " <proc_id=" << cpu->processor_id 
+            << ", lapic_id=" << cpu->lapic_id << ">" << endl;
     }
 
     if (cpu_count <= 1) {
@@ -174,7 +166,7 @@ extern "C" void kernel_main(void) {
         if (cpu->lapic_id == resp->bsp_lapic_id)
             continue;
         
-        void* raw_ptr = kmalloc(AP_STACK_SIZE);
+        void* raw_ptr = slab::alloc(16384);
         if (!raw_ptr) 
             kernel_panic("smp: Failed to allocate AP stack");
         memset(raw_ptr, 0, AP_STACK_SIZE);

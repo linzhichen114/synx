@@ -46,7 +46,7 @@ void send_eoi() {
     write_reg(Reg::EOI, 0);
 }
 
-void disable_legacy_pic() {\
+void disable_legacy_pic() {
     asm volatile(
         "movb $0xFF, %%al\n"
         "outb %%al, $0x21\n"   // Master PIC
@@ -80,8 +80,6 @@ void init() {
     write_reg(Reg::TPR, 0);
 
     base_info = info;
-
-    kout << "apic: Initialized." << endl;
 }
 
 enum class TimerDivide : uint32_t {
@@ -118,7 +116,7 @@ static uint32_t timer_ticks_per_ms = 0;
 void timer_init(uint8_t vector, bool periodic, uint32_t initial_count) {
     if (timer_ticks_per_ms == 0) {
         timer_ticks_per_ms = calibrate_timer();
-        kout << "apic: Freq: " << timer_ticks_per_ms << " ticks/ms\n";
+        kout << "apic: (Timer) Freq: " << timer_ticks_per_ms << " ticks/ms\n";
     }
 
     write_reg(Reg::TIMER_DIVIDE, static_cast<uint32_t>(TimerDivide::DIV_16));
@@ -130,7 +128,7 @@ void timer_init(uint8_t vector, bool periodic, uint32_t initial_count) {
     write_reg(Reg::LVT_TIMER, lvt_val);
 
     if (periodic) {
-        write_reg(Reg::TIMER_INIT_CNT, timer_ticks_per_ms * 10);
+        write_reg(Reg::TIMER_INIT_CNT, timer_ticks_per_ms * APIC_TIMER_TICK);
     } else {
         write_reg(Reg::TIMER_INIT_CNT, initial_count);
     }

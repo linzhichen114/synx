@@ -42,8 +42,7 @@ static void printStackTrace(uint64_t rbp, uint64_t rip) {
         kout << " [<" << (uint64_t*)ret_addr << ">] ? ";
         printSymbol(ret_addr);
         kout << "\n";
-        
-        // 移动到上一个栈帧
+
         rbp = *(uint64_t*)rbp;
     }
 }
@@ -53,7 +52,7 @@ extern "C" void kernel_panic(const char* message) {
 
     kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---" << endl;
     char vendor_string[13]; cpuid::vendor_string(vendor_string);
-    kout << "CPU: " << get_lapic_id() << " " << KERNEL_NAME << " Hardware: " << vendor_string << " " << KERNEL_VERSION << endl;
+    kout << "CPU: " << get_lapic_id() << " Hardware: " << vendor_string << " " << KERNEL_NAME << " " << KERNEL_VERSION << endl;
 
     uint64_t current_rbp;
     asm volatile ("mov %%rbp, %0" : "=r"(current_rbp));
@@ -62,8 +61,5 @@ extern "C" void kernel_panic(const char* message) {
 
     kout << "\n--- [ end Kernel panic ] ---" << endl;
 
-    // Halt and catch fire
-    for (;;) {
-        asm volatile ("hlt");
-    }
+    hcf();
 }

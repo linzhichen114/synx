@@ -50,6 +50,7 @@ public:
     void write(const char* str);
     void writeHex_uint32(uint32_t val);
     void writeHex_uint16(uint16_t val);
+    friend ostreamk& operator<<(ostreamk& os, const char      c);
     friend ostreamk& operator<<(ostreamk& os, const char*     s); 
     friend ostreamk& operator<<(ostreamk& os, const uint8_t   v);  
     friend ostreamk& operator<<(ostreamk& os, const uint16_t  v);  
@@ -94,6 +95,6 @@ extern "C" void kernel_panic(const char* message);
 #define FONT_WIDTH ((uint32_t)8)
 #define FONT_HEIGHT ((uint32_t)16)
 #define kout (kprint::__locked_kout)
-#define endl "\n"
+#define endl '\n'
 #define __kprintlock_acq kprint::__kprint_lock.acquire()
 #define __kprintlock_rel kprint::__kprint_lock.release()

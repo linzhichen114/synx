@@ -4,11 +4,12 @@
 
 constexpr const auto PAGE_SIZE = 4096;
 
-// Limine 提供的 HHDM 请求
 extern volatile struct limine_hhdm_request hhdm_request;
 
-extern "C" void pmmInit();
-
-extern "C" uint64_t pmm_allocPage();
-
-extern "C" void pmm_freePage(uint64_t phys_addr);
+namespace pmm {
+void init();
+uint64_t allocPage();
+uint64_t allocPages(size_t count);
+void freePage(uint64_t phys_addr);
+void freePages(uint64_t phys_addr, size_t count);
+}

@@ -25,8 +25,9 @@ static inline void bitmap_clear(size_t bit) {
     uint8_t* bitmap_virt = (uint8_t*)phys_to_virt(bitmap);
     bitmap_virt[bit / 8] &= ~(1 << (bit % 8));
 }
+namespace pmm {
 
-extern "C" void pmmInit() {
+void init() {
     kout << "pmm: Initializing..." << endl;
 
     uint64_t highest_addr = 0;
@@ -49,7 +50,7 @@ extern "C" void pmmInit() {
     }
 
     if (!bitmap_phys)
-        kernel_panic("pmm: Could not allocate memory for bitmap.");
+        kernel_panic("pmm: Could not allocate memory for bitmap");
 
     bitmap = bitmap_phys;
 
@@ -74,7 +75,7 @@ extern "C" void pmmInit() {
     kout << "pmm: Total pages: " << total_pages << ", Free pages: " << free_pages << endl;
 }
 
-extern "C" uint64_t pmm_allocPage() {
+uint64_t allocPage() {
     for (size_t i = 0; i < total_pages; i++) {
         if (!bitmap_get(i)) {
             bitmap_set(i);
@@ -85,10 +86,46 @@ extern "C" uint64_t pmm_allocPage() {
     return 0;
 }
 
-extern "C" void pmm_freePage(uint64_t phys_addr) {
+void freePage(uint64_t phys_addr) {
     size_t page = phys_addr / PAGE_SIZE;
     if (page < total_pages && bitmap_get(page)) {
         bitmap_clear(page);
         free_pages++;
     }
+}
+
+uint64_t allocPages(size_t count) {
+    if (count == 0) return 0;
+    if (count == 1) return allocPage();
+
+    size_t consecutive = 0;
+    size_t start_page = 0;
+
+    for (size_t i = 0; i < total_pages; i++) {
+        if (!bitmap_get(i)) {
+            if (consecutive == 0) start_page = i;
+            consecutive++;
+            if (consecutive == count) {
+                for (size_t j = start_page; j <= i; j++)
+                    bitmap_set(j);
+                free_pages -= count;
+                return start_page * PAGE_SIZE;
+            }
+        } else {
+            consecutive = 0;
+        }
+    }
+    return 0;
+}
+
+void freePages(uint64_t phys_addr, size_t count) {
+    size_t page = phys_addr / PAGE_SIZE;
+    for (size_t i = 0; i < count; i++) {
+        if (page + i < total_pages && bitmap_get(page + i)) {
+            bitmap_clear(page + i);
+            free_pages++;
+        }
+    }
+}
+
 }

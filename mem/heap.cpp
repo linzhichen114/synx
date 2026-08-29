@@ -18,7 +18,7 @@ static bool expand_heap(size_t size) {
     if (pages == 0) pages = 1;
     
     
-    uint64_t first_phys = pmm_allocPage();
+    uint64_t first_phys = pmm::allocPage();
     if (!first_phys) return false;
     
 
@@ -39,7 +39,7 @@ static bool expand_heap(size_t size) {
     }
     
     for (size_t i = 1; i < pages; i++) {
-        uint64_t next_phys = pmm_allocPage();
+        uint64_t next_phys = pmm::allocPage();
         if (!next_phys) break;
         
         uint64_t next_virt = (uint64_t)phys_to_virt(next_phys);
@@ -58,11 +58,10 @@ static bool expand_heap(size_t size) {
     return true;
 }
 
-// 初始化堆
 void heapInit() {
     if (!hhdm_request.response || !hhdm_request.response->offset)
         kernel_panic("heap: HHDM not available");
-    kout << "heap: HHDM offset = 0x" << hhdm_request.response->offset << endl;
+    kout << "heap: HHDM offset: " << hhdm_request.response->offset << endl;
     if (!expand_heap(INITIAL_HEAP_PAGES * PAGE_SIZE))
         kernel_panic("heap: Failed to allocate heap");
     kout << "heap: Heap was Sussessfully Initallized, size: "<< (uint32_t)(INITIAL_HEAP_PAGES * PAGE_SIZE) << endl;
@@ -70,7 +69,7 @@ void heapInit() {
 
 void* kmalloc(size_t size) {
     if (size == 0) return nullptr;
-    size = (size + 7) & ~7;  // 8字节对齐
+    size = (size + 7) & ~7;
 
     BlockHeader* current = free_list;
     while (current) {
@@ -84,9 +83,8 @@ void* kmalloc(size_t size) {
     size_t needed = size + HEADER_SIZE;
     size_t pages = (needed + PAGE_SIZE - 1) / PAGE_SIZE;
     if (pages == 0) pages = 1;
-    
-    // 至少扩展一页，确保新块足够大
-    uint64_t first_phys = pmm_allocPage();
+
+    uint64_t first_phys = pmm::allocPage();
     if (!first_phys) return nullptr;
     
     uint64_t virt = (uint64_t)phys_to_virt(first_phys);
@@ -97,7 +95,7 @@ void* kmalloc(size_t size) {
     free_list = new_block;
     
     for (size_t i = 1; i < pages; i++) {
-        uint64_t next_phys = pmm_allocPage();
+        uint64_t next_phys = pmm::allocPage();
         if (!next_phys) break;
         
         uint64_t next_virt = (uint64_t)phys_to_virt(next_phys);
