@@ -4,6 +4,7 @@
 #include <limine.h>
 
 extern volatile struct limine_rsdp_request rsdp_request;
+extern volatile struct limine_hhdm_request hhdm_request;
 
 namespace madt {
 
@@ -12,9 +13,6 @@ static const MadtHeader* find_madt() {
     if (!resp || !resp->address) return nullptr;
 
     auto* rsdp = (const RsdpDescriptor*)resp->address;
-
-    extern volatile struct limine_hhdm_request hhdm_request;
-    uint64_t hhdm_offset = hhdm_request.response->offset;
 
     uint64_t sdt_phys = 0;
     bool is_xsdt = false;
@@ -31,7 +29,7 @@ static const MadtHeader* find_madt() {
         return nullptr;
     }
 
-    auto* sdt_header = (const SdtHeader*)(sdt_phys + hhdm_offset);
+    auto* sdt_header = (const SdtHeader*)(sdt_phys + hhdm_request.response->offset);
 
     if (sdt_header->length < sizeof(SdtHeader)) {
         kernel_panic("acpi_madt: SDT length invalid.");
@@ -51,7 +49,7 @@ static const MadtHeader* find_madt() {
             table_phys = entries[i];
         }
 
-        auto* tbl = (const SdtHeader*)(table_phys + hhdm_offset);
+        auto* tbl = (const SdtHeader*)(table_phys + hhdm_request.response->offset);
 
         if (tbl->signature[0] == 'A' && tbl->signature[1] == 'P' &&
             tbl->signature[2] == 'I' && tbl->signature[3] == 'C') {

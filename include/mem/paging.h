@@ -28,5 +28,5 @@ extern "C" void init();
 void map_page(uint64_t virt, uint64_t phys, uint64_t flags);
 
 void map_lapic(uint64_t phys_base);
-void map_ioapic(uint64_t phys_base);
+void map_ioapic(uint64_t phys_base, uint64_t virt_base);
 }

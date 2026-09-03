@@ -94,13 +94,13 @@ void map_lapic(uint64_t phys_base) {
     asm volatile("invlpg (%0)" :: "r"(LAPIC_VIRT_BASE) : "memory");
 }
 
-void map_ioapic(uint64_t phys_base) {
+void map_ioapic(uint64_t phys_base, uint64_t virt_base) {
     paging::map_page(
-        IOAPIC_VIRT_BASE,
+        virt_base,
         phys_base & ~0xFFFULL,
         PTE_PRESENT | PTE_WRITABLE | PTE_UNCACHEABLE
     );
-    asm volatile("invlpg (%0)" :: "r"(IOAPIC_VIRT_BASE) : "memory");
+    asm volatile("invlpg (%0)" :: "r"(virt_base) : "memory");
 }
 
 } // namespace paging

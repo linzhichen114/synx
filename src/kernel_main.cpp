@@ -13,9 +13,10 @@ extern "C" {
 #include "mem/paging.h"
 #include "mem/heap.h"
 #include "mem/slab.h"
-#include "apic/apic.h"
 #include "proc/ap_entry.h"
 #include "proc/sched.h"
+#include "proc/cpuid.h"
+#include "apic/apic.h"
 #include "apic/ioapic.h"
 #include "apic/madt.h"
 #include "apic/msr.h"
@@ -160,9 +161,14 @@ extern "C" void kernel_main(void) {
 
     apic::init();
 
+    madt::parse();
     auto& info = madt::get_apic_info();
+
+    const_cast<madt::ApicInfo&>(info).bsp_apic_id = static_cast<uint8_t>(get_lapic_id());
+    kout << "apic: BSP APIC ID = " << get_lapic_id() << endl;
     for (size_t i = 0; i < info.ioapic_count; i++)
-        ioapic::init(info.ioapics[i].phys_base);
+        ioapic::init(info.ioapics[i].phys_base, info.ioapics[i].gsi_base);
+
     kout << "ioapic: Initialized, all IRQs masked." << endl;
 
     apic::timer_init(32, true, 0);

@@ -1,93 +1,134 @@
 #include "apic/ioapic.h"
+#include "apic/madt.h"
 #include "kprint.h"
 #include "mem/paging.h"
 #include "string.h"
 
 namespace ioapic {
 
-static volatile uint32_t* g_ioapic_base = nullptr;
+struct IoApicInstance {
+    volatile uint32_t* virt_base;
+    uint32_t           phys_base;
+    uint32_t           gsi_base;
+    uint32_t           max_rte;
+};
 
-static uint32_t read_reg(uint8_t reg) {
-    g_ioapic_base[0] = reg;
-    return g_ioapic_base[4];
-}
-
-static void write_reg(uint8_t reg, uint32_t val) {
-    g_ioapic_base[0] = reg;
-    g_ioapic_base[4] = val;
-}
+static constexpr size_t MAX_IOAPICS = 8;
+static IoApicInstance g_ioapics[MAX_IOAPICS];
+static size_t g_ioapic_count = 0;
 
 constexpr uint32_t RDT_LOW_BASE  = 0x10;
 constexpr uint32_t MASK_BIT      = (1U << 16);
 constexpr uint32_t TRIGGER_LEVEL = (1U << 15);
 constexpr uint32_t POLARITY_LOW  = (1U << 13);
 
-
-void init(uint64_t phys_base) {
-    paging::map_ioapic(phys_base);
-
-    g_ioapic_base = reinterpret_cast<volatile uint32_t*>(paging::IOAPIC_VIRT_BASE);
-
-    uint32_t ver = read_reg(0x01);
-    uint8_t max_entries = ((ver >> 16) & 0xFF) + 1;
-    uint8_t apic_id     = (read_reg(0x00) >> 24) & 0x0F;
-
-
-    for (uint8_t i = 0; i < max_entries; i++) {
-        write_reg(RDT_LOW_BASE + 2 * i, MASK_BIT | (32 + i));
-        write_reg(RDT_LOW_BASE + 2 * i + 1, 0);
-    }
-
-    kout << "ioapic: IOAPIC Initalized:" << endl;
-    kout << "ioapic:   Virt base=" << paging::IOAPIC_VIRT_BASE << ", Phys base=" << phys_base << endl;
-    kout << "ioapic:   ID=" << apic_id << ", Version=" << (ver & 0xFF) << ", Max Entries=" << max_entries << endl;
-
-    kout << "ioapic: Verifying IRQ1: Vector `";
-    write_reg(0x10 + 2 * 1, 0x00000021);
-    write_reg(0x10 + 2 * 1 + 1, 0);
-    uint32_t verify_low = read_reg(0x10 + 2 * 1);
-    kout << verify_low << "'";
-    if (verify_low == 33) 
-        kout << " - passed." << endl;
-    else {
-        kout << " - ERR" << endl;
-        
-        char buf[256]; buf[0] = '\0';
-        strcat(buf, "ioapic: Assertion Failed: (IRQ1) vector `");
-        char vec_buf[5]; vec_buf[0] = '\0';
-        itoa(vec_buf, verify_low, 10);
-        strcat(buf, vec_buf);
-        strcat(buf, "', needed `33'.");
-        kernel_panic(buf);
-    }
+static uint32_t read_reg(const IoApicInstance* inst, uint8_t reg) {
+    inst->virt_base[0] = reg;
+    return inst->virt_base[4];
 }
 
-void route_irq(uint8_t irq, uint8_t dest_apic_id, uint8_t vector) {
-    if (!g_ioapic_base) {
-        kernel_panic("ioapic: Not Initialized.\n");
+static void write_reg(const IoApicInstance* inst, uint8_t reg, uint32_t val) {
+    inst->virt_base[0] = reg;
+    inst->virt_base[4] = val;
+}
+
+static uint32_t isa_to_gsi(uint8_t isa_irq) {
+    const auto& info = madt::get_apic_info();
+    for (size_t i = 0; i < info.iso_count; i++) {
+        if (info.isos[i].isa_irq == isa_irq)
+            return info.isos[i].gsi;
+    }
+    return isa_irq;
+}
+
+static IoApicInstance* find_ioapic_for_gsi(uint32_t gsi) {
+    for (size_t i = 0; i < g_ioapic_count; i++) {
+        if (gsi >= g_ioapics[i].gsi_base && 
+            gsi < g_ioapics[i].gsi_base + g_ioapics[i].max_rte)
+            return &g_ioapics[i];
+    }
+    return nullptr;
+}
+
+
+void init(uint64_t phys_base, uint32_t gsi_base) {
+    if (g_ioapic_count >= MAX_IOAPICS) {
+        kernel_panic("ioapic: Too many IOAPICs!");
         return;
     }
 
-    uint32_t low = static_cast<uint32_t>(vector);
-    uint32_t high = static_cast<uint32_t>(dest_apic_id) << 24;
+    uint64_t virt_addr = paging::IOAPIC_VIRT_BASE + (g_ioapic_count * 0x1000);
+    paging::map_ioapic(phys_base, virt_addr);
 
-    write_reg(RDT_LOW_BASE + 2 * irq, low);
-    write_reg(RDT_LOW_BASE + 2 * irq + 1, high);
+    auto& inst = g_ioapics[g_ioapic_count];
+    inst.phys_base = static_cast<uint32_t>(phys_base);
+    inst.virt_base = reinterpret_cast<volatile uint32_t*>(virt_addr);
+    inst.gsi_base  = gsi_base;
 
-    kout << "ioapic: Routed IRQ " << irq 
-         << " => Vector " << vector 
+    uint32_t ver = read_reg(&inst, 0x01);
+    inst.max_rte = ((ver >> 16) & 0xFF) + 1;
+    uint8_t apic_id = (read_reg(&inst, 0x00) >> 24) & 0x0F;
+
+    for (uint32_t i = 0; i < inst.max_rte; i++) {
+        write_reg(&inst, RDT_LOW_BASE + 2 * i, MASK_BIT);
+        write_reg(&inst, RDT_LOW_BASE + 2 * i + 1, 0);
+    }
+
+    kout << "ioapic: IOAPIC #" << g_ioapic_count << " Initialized:" << endl;
+    kout << "ioapic:   Phys=" << hex << phys_base << dec
+         << ", Virt=" << hex << virt_addr << dec << endl;
+    kout << "ioapic:   ID=" << apic_id
+         << ", Ver=" << (ver & 0xFF)
+         << ", MaxRTE=" << inst.max_rte
+         << ", GSI base=" << inst.gsi_base << endl;
+
+    g_ioapic_count++;
+}
+
+void route_irq(uint8_t isa_irq, uint8_t dest_apic_id, uint8_t vector) {
+    if (g_ioapic_count == 0) {
+        kernel_panic("ioapic: Not initialized");
+        return;
+    }
+
+    uint32_t gsi = isa_to_gsi(isa_irq);
+    auto* inst = find_ioapic_for_gsi(gsi);
+    if (!inst) {
+        kout << "ioapic: ERR: No IOAPIC handles GSI " << gsi
+             << " (ISA IRQ " << isa_irq << ")" << endl;
+        return;
+    }
+
+    uint32_t rte_idx = gsi - inst->gsi_base;
+
+    uint32_t low = read_reg(inst, RDT_LOW_BASE + 2 * rte_idx);
+    write_reg(inst, RDT_LOW_BASE + 2 * rte_idx, low | MASK_BIT);
+
+    write_reg(inst, RDT_LOW_BASE + 2 * rte_idx + 1,
+              static_cast<uint32_t>(dest_apic_id) << 24);
+
+    low = static_cast<uint32_t>(vector);
+    write_reg(inst, RDT_LOW_BASE + 2 * rte_idx, low);
+
+    kout << "ioapic: Routed IRQ" << isa_irq
+         << " -> GSI" << gsi
+         << " (RTE " << rte_idx << ")"
+         << " => Vec " << vector
          << ", CPU " << dest_apic_id << endl;
 }
 
-void mask_irq(uint8_t irq, bool masked) {
-    if (!g_ioapic_base) return;
+void mask_irq(uint8_t isa_irq, bool masked) {
+    if (g_ioapic_count == 0) return;
 
-    uint32_t low = read_reg(RDT_LOW_BASE + 2 * irq);
-    if (masked)
-        low |= MASK_BIT;
-    else
-        low &= ~MASK_BIT;
-    write_reg(RDT_LOW_BASE + 2 * irq, low);
+    uint32_t gsi = isa_to_gsi(isa_irq);
+    auto* inst = find_ioapic_for_gsi(gsi);
+    if (!inst) return;
+
+    uint32_t rte_idx = gsi - inst->gsi_base;
+    uint32_t low = read_reg(inst, RDT_LOW_BASE + 2 * rte_idx);
+    if (masked) low |= MASK_BIT;
+    else        low &= ~MASK_BIT;
+    write_reg(inst, RDT_LOW_BASE + 2 * rte_idx, low);
 }
 
 } // namespace ioapic
