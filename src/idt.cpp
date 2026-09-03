@@ -71,12 +71,10 @@ extern "C" void exceptionHandler(InterruptFrame* frame, uint64_t error_code) {
 
 extern "C" void irqHandler(InterruptFrame* frame) {
     uint8_t vector = frame->int_no;
-    if (vector == ps2::PS2_KEYBOARD_VECTOR) {
-        kout << "[KBD IRQ]" << endl; 
-    }
 
     switch (vector) {
         case apic::APIC_TIMER_VECTOR: {
+            apic::timer_tick();
             apic::send_eoi();
             scheduler::schedule();
             break;

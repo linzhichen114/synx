@@ -42,9 +42,8 @@ extern "C" inline void io_wait() {
     __asm__ volatile("outb %%al, $0x80" : : "a"(0));
 }
 
-#define phys_to_virt(phys) (void*)((uint64_t)(phys) + hhdm_request.response->offset)
-
-#define virt_to_phys(virt) (uint64_t)(virt) - hhdm_request.response->offset;
+#define phys_to_virt(phys) ((void*)((uint64_t)(phys) + hhdm_request.response->offset))
+#define virt_to_phys(virt) ((uint64_t)(virt) - hhdm_request.response->offset)
 
 #define KERNEL_STACK_SIZE 16384
 

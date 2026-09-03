@@ -5,6 +5,7 @@
 namespace apic {
 
 extern volatile uint32_t* apic_mmio_base;
+extern volatile uint64_t g_lapic_total_ticks;
 
 enum class Reg : uint16_t {
     APIC_ID         = 0x020,
@@ -47,6 +48,9 @@ bool cpu_has_apic();
 bool cpu_has_tsc_deadline();
 
 void timer_stop();
+
+uint64_t get_uptime_us();
+void timer_tick();
 
 constexpr uint64_t LAPIC_BASE = 0xFEE00000;
 constexpr uint32_t LAPIC_ID_REG = 0x20;

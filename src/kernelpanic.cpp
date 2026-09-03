@@ -26,11 +26,11 @@ extern "C" void printSymbol(uint64_t addr) {
 }
 
 static void printStackTrace(uint64_t rbp, uint64_t rip) {
-    kout << "\nCall Trace:\n";
+    kout << endl << "Call Trace:" << endl;
     
     kout << " [<" << (uint64_t*)rip << ">] ? ";
     printSymbol(rip);
-    kout << "\n";
+    kout << endl;
 
     while (rbp != 0 && rbp >= 0xffff800000000000ULL) {
         if (rbp & 7) break; 
@@ -41,16 +41,17 @@ static void printStackTrace(uint64_t rbp, uint64_t rip) {
         
         kout << " [<" << (uint64_t*)ret_addr << ">] ? ";
         printSymbol(ret_addr);
-        kout << "\n";
+        kout << endl;
 
         rbp = *(uint64_t*)rbp;
     }
 }
 
-extern "C" void kernel_panic(const char* message) {
-    asm volatile ("cli");
+extern "C" __attribute__((noinline)) void kernel_panic(const char* message) {
+    asm volatile ("cli");//hcf();
 
-    kout << "\n--- [ Kernel panic - not syncing: " << message << " ] ---" << endl;
+    kout << endl;
+    kout << "--- [ Kernel panic - not syncing: " << message << " ] ---" << endl;
     char vendor_string[13]; cpuid::vendor_string(vendor_string);
     kout << "CPU: " << get_lapic_id() << " Hardware: " << vendor_string << " " << KERNEL_NAME << " " << KERNEL_VERSION << endl;
 
@@ -59,7 +60,7 @@ extern "C" void kernel_panic(const char* message) {
     uint64_t current_rip = getRip();
     printStackTrace(current_rbp, current_rip);
 
-    kout << "\n--- [ end Kernel panic ] ---" << endl;
+    kout << endl << "--- [ end Kernel panic ] ---" << endl;
 
     hcf();
 }

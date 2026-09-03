@@ -3,6 +3,14 @@
 #include <stdint.h>
 #include "proc/spinlock.h"
 
+
+#define FONT_WIDTH ((uint32_t)8)
+#define FONT_HEIGHT ((uint32_t)16)
+#define kout (kprint::__locked_kout)
+#define endl '\n'
+#define __kprintlock_acq kprint::__kprint_lock.acquire()
+#define __kprintlock_rel kprint::__kprint_lock.release()
+
 namespace kprint {
 
 typedef struct {
@@ -29,6 +37,12 @@ inline constexpr ARGBColor_t HexToARGB(uint32_t hex) {
     };
 }
 
+//todo: iomanip
+typedef struct
+{
+    uint8_t base;
+} KprintManipular_t;
+
 class ostreamk {
 private:
     ARGBColor_t fg;
@@ -50,6 +64,7 @@ public:
     void write(const char* str);
     void writeHex_uint32(uint32_t val);
     void writeHex_uint16(uint16_t val);
+    friend ostreamk& operator<<(ostreamk& os, const bool      b);
     friend ostreamk& operator<<(ostreamk& os, const char      c);
     friend ostreamk& operator<<(ostreamk& os, const char*     s); 
     friend ostreamk& operator<<(ostreamk& os, const uint8_t   v);  
@@ -60,7 +75,7 @@ public:
     friend ostreamk& operator<<(ostreamk& os, const uint16_t* p);
     friend ostreamk& operator<<(ostreamk& os, const uint32_t* p);
     friend ostreamk& operator<<(ostreamk& os, const uint64_t* p);
-    // friend ostreamk& operator<<(ostreamk& os, const void*     p);
+    friend ostreamk& operator<<(ostreamk& os, const KprintManipular_t manip);
     
     uint32_t __get_fg() {
         return ARGBToHex(fg);
@@ -68,20 +83,41 @@ public:
     uint32_t __get_bg() {
         return ARGBToHex(bg);
     }
-    ostreamk& __log_prefix();
+    void __log_prefix();
 };
 
 extern ostreamk __kout;
 extern lock::SpinLock __kprint_lock;
 
 class __kprint_locked {
+    bool prefix_printed = false;
 public:
     __kprint_locked()  { kprint::__kprint_lock.acquire(); }
     ~__kprint_locked() { kprint::__kprint_lock.release(); }
     
     template<typename T>
     __kprint_locked& operator<<(const T& val) {
+        if (!prefix_printed) {
+            kprint::__kout.__log_prefix();
+            prefix_printed = true;
+        }
         kprint::__kout << val;
+        return *this;
+    }
+
+    __kprint_locked& operator<<(char c) {
+        if (!prefix_printed) {
+            kprint::__kout.__log_prefix();
+            prefix_printed = true;
+        }
+        kprint::__kout << c;
+        if (c == '\n') {
+            prefix_printed = false;
+        }
+        return *this;
+    }
+    __kprint_locked& operator<<(KprintManipular_t manip) {
+        kprint::__kout << manip;
         return *this;
     }
 };
@@ -91,10 +127,5 @@ extern __kprint_locked __locked_kout;
 
 extern "C" void kernel_panic(const char* message);
 
-
-#define FONT_WIDTH ((uint32_t)8)
-#define FONT_HEIGHT ((uint32_t)16)
-#define kout (kprint::__locked_kout)
-#define endl '\n'
-#define __kprintlock_acq kprint::__kprint_lock.acquire()
-#define __kprintlock_rel kprint::__kprint_lock.release()
+#define hex (kprint::KprintManipular_t{16})
+#define dec (kprint::KprintManipular_t{10})

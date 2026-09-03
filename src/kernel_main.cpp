@@ -17,6 +17,7 @@ extern "C" {
 #include "proc/ap_entry.h"
 #include "proc/sched.h"
 #include "apic/ioapic.h"
+#include "apic/msr.h"
 #include "ps2_keyboard.h"
 
 
@@ -103,7 +104,12 @@ extern "C" void kernel_main(void) {
 
     kout << KERNEL_NAME << " version " << KERNEL_VERSION << " (" << COMPILER_NAME << " " << COMPILER_VERSION << ") SMP " << BUILD_DATE << " " << BUILD_TIME << endl;
 
-    kout << "Successfully called all constructors." << endl;
+    kout << "All constructors called successfully." << endl;
+
+    uint64_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    paging::early_save_cr3(cr3 & ~0xFFF);
+    kout << "CR3 register saved." << endl;
 
     const auto fb0 = framebuffer_request.response->framebuffers[0];
     kout << "fb0: Base " << (uint64_t*)fb0->address << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
@@ -111,6 +117,26 @@ extern "C" void kernel_main(void) {
     kout << "fb0: Color mode: ARGB." << endl;
     kout << "fbcon: fb0 is primary device." << endl;
     kout << "fbcon: Screen grid: " << FONT_WIDTH << "x" << FONT_HEIGHT << " characters." << endl;
+
+    uint64_t apic_base_msr = msr::read(0x1B);
+    bool lapic_enabled = (apic_base_msr >> 11) & 1;
+
+    kout << "Checking for HHDM: ";
+    if (!hhdm_request.response || !hhdm_request.response->offset) {
+        kout << "Not Available" << endl;
+        kernel_panic("heap: HHDM not available");
+    }
+    kout << "Available, HHDM offset: " << hhdm_request.response->offset << endl;
+
+    kout << "Checking for LAPIC:" << endl;
+    kout << "  APIC_BASE MSR: " << apic_base_msr << endl;
+    kout << "  LAPIC Enabled? " << (lapic_enabled ? "yes" : "no") << endl;
+
+    if (!lapic_enabled) {
+        apic_base_msr |= (1ULL << 11);
+        msr::write(0x1B, apic_base_msr);
+        kout << "LAPIC manually enabled." << endl;
+    }
 
     // kout << "Command Line: " << executable_cmdline_request.response->cmdline << endl;
 
@@ -120,17 +146,20 @@ extern "C" void kernel_main(void) {
     pmm::init();
     paging::init();
     heapInit();
-    
+
+    if (!ps2::init()) {
+        kernel_panic("Failed to initialize PS/2 keyboard.");
+    }
+
     asm volatile("cli");
     apic::init();
     kout << "apic: Initialized, Base: " << apic::get_base_info().mmio_base << endl;
 
-    ioapic::init(0xFEC00000);
+    ioapic::init(0xFEC00000ULL);
     kout << "ioapic: Initialized, all IRQs masked." << endl;
 
     apic::timer_init(32, true, 0);
     kout << "apic: (Timer) Preemptive scheduling enabled." << endl;
-
 
     kout << "smp: BSP Initialized Successfully, Starting SMP..." << endl;
 
@@ -193,23 +222,21 @@ extern "C" void kernel_main(void) {
     while (__atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) < expected_aps) {
         asm volatile("pause");
         if (--AP_TIMEOUT == 0) {
-            kout << "smp: WARNING: Timeout! Now " 
-                << __atomic_load_n(&ap_online_count, __ATOMIC_ACQUIRE) 
-                << "/" << expected_aps << " APs online." << endl;
+            kernel_panic("smp: Timeout waiting for APs to come online.");
             break;
         }
     }
 
-
     kout << "smp: All " << expected_aps << " APs online, initializing scheduler." << endl;
 
 smp_skipping:
-
-    scheduler::init();
-
+    scheduler::init_all_cpus();
     __atomic_store_n(&scheduler_ready, true, __ATOMIC_RELEASE);
+    kout << "scheduler: Scheduler ready." << endl;
+
 
     asm volatile("sti");
+    
 
     asm volatile ("sti; hlt; jmp .-2" ::: "memory");
     //kernel_panic("kernel_main: others function is not implemented yet - system halting.");

@@ -61,8 +61,8 @@ void schedule() {
 
     Task* current = get_current_task();
     if (!current) {
-        kout << "scheduler: no current task on CPU" 
-             << get_cpu_id() << endl;
+        kout << "scheduler: No current task on CPU " 
+             << get_cpu_id() << ": HALTED." << endl;
         hcf();
     }
 
@@ -84,25 +84,40 @@ void schedule() {
     }
 }
 
-void init() {
+void __idle() {
+    asm volatile("sti; hlt; jmp .-2" ::: "memory");
+}
+
+void init_all_cpus(void (*entry)(), uint64_t stack_size, const char* name) {
     if (initialized) return;
     initialized = true;
 
     for (uint32_t cpu = 0; cpu < mp_request.response->cpu_count; cpu++) {
-        Task* idle = create_task([]{
-            asm volatile("sti; hlt; jmp .-2" ::: "memory");
-        }, 4096);
+        Task* task = create_task(entry, stack_size);
 
-        if (!idle) kernel_panic("scheduler: Failed to create idle task");
+        if (!task) kernel_panic("scheduler: Failed to create task");
 
-        idle->pid = 0;
-        idle->state = TaskState::RUNNING;
-        per_cpu_data[cpu].current_task = idle;
+        task->pid = 0;
+        task->state = TaskState::RUNNING;
+        per_cpu_data[cpu].current_task = task;
         per_cpu_data[cpu].cpu_id = cpu;
-        kout << "scheduler: <cpu " << cpu << "> idle tasks created." << endl;
+        kout << "scheduler: <cpu " << cpu << "> task `" << name << "' created." << endl;
     }
+}
 
-    kout << "scheduler: Scheduler ready." << endl;
+void init(void (*entry)(), uint64_t stack_size, const char* name, uint16_t processor_id) {
+    if (initialized) return;
+    initialized = true;
+
+        Task* task = create_task(entry, stack_size);
+
+        if (!task) kernel_panic("scheduler: Failed to create task");
+
+        task->pid = 0;
+        task->state = TaskState::RUNNING;
+        per_cpu_data[processor_id].current_task = task;
+        per_cpu_data[processor_id].cpu_id = processor_id;
+        kout << "scheduler: <cpu " << processor_id << "> task `" << name << "' created." << endl;
 }
 
 }

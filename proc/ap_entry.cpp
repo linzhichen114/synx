@@ -21,15 +21,14 @@ extern "C" void ap_main(struct limine_mp_info* info) {
 
     __atomic_fetch_add(&ap_online_count, 1, __ATOMIC_SEQ_CST);
 
-    //kout << "smp(ap" << info->lapic_id << " @ cpu " << cpu_id << "): Online, stack=" << (uint64_t*)stack_top << endl;
+    kout << "smp: From <ap " << info->lapic_id << " @ cpu " << cpu_id << ">: Online, stack=" << (uint64_t*)stack_top << endl;
 
     while (!__atomic_load_n(&scheduler_ready, __ATOMIC_ACQUIRE))
         asm volatile("pause");
-    
-    // 启动定时器并进入 idle
+
     apic::timer_init(32, true, 0);
     
-    scheduler::init();
+    // scheduler::init(scheduler::__idle, 4096, "idle", get_lapic_id());
 
     for (;;)
         asm volatile("sti; hlt" ::: "memory");

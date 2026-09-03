@@ -47,7 +47,9 @@ uint32_t get_cpu_id();
 Task* get_current_task();
 void set_current_task(Task* t);
 
-void init();
+void __idle();
+void init_all_cpus(void (*entry)() = __idle, uint64_t stack_size = 4096, const char* name = "idle");
+void init(void (*entry)() = __idle, uint64_t stack_size = 4096, const char* name = "idle", uint16_t processor_id = 0);
 void schedule();
 Task* create_task(void (*entry_point)(), uint64_t stack_size);
 }

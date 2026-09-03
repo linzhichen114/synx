@@ -112,36 +112,20 @@ static char translate(uint8_t scancode, bool shift, bool caps) {
     }
     return c;
 }
-
+__attribute__((noinline))
 static void push_event(const KeyEvent& ev) {
     size_t next = (s_head + 1) % KEY_BUF_SIZE;
-    if (next != s_tail) { // Drop if full
+    if (next != s_tail) {
         s_key_buf[s_head] = ev;
         s_head = next;
     }
 }
-
+__attribute__((noinline))
 bool poll(KeyEvent& event) {
     if (s_head == s_tail) return false;
     event = s_key_buf[s_tail];
     s_tail = (s_tail + 1) % KEY_BUF_SIZE;
     return true;
-}
-
-
-static void process_scancode(uint8_t code) {
-    if (code == 0xE0) {
-        s_e0_prefix = true;
-        return;
-    }
-
-    if (code == 0xF0) {
-        static bool f0_pending = false;
-        f0_pending = true;
-        return; // Wait for next byte
-    }
-
-    __builtin_unreachable();
 }
 
 enum class DecoderState : uint8_t {
@@ -216,15 +200,6 @@ void decode_and_push(uint8_t raw) {
 }
 
 
-void irq_handler() {
-    uint8_t status = inb(STATUS_PORT);
-    if (!(status & STATUS_OUTPUT_FULL)) return;
-
-    uint8_t data = inb(DATA_PORT);
-    decode_and_push(data);
-}
-
-
 bool init() {
     write_cmd(CMD_DISABLE_P1);
     write_cmd(CMD_DISABLE_P2);
@@ -241,26 +216,38 @@ bool init() {
 
     write_cmd(CMD_ENABLE_P1);
 
-    if (!kbd_send_cmd(KBD_CMD_SET_SCANCODE)) {
-        kout << "ps2: Failed to send set scancode cmd\n";
+    write_data(KBD_CMD_SET_SCANCODE);
+    wait_output_full();
+    if (inb(DATA_PORT) != KBD_CMD_ACK) {
+        kout << "ps2_keyboard: Failed to send set scancode cmd" << endl;
         return false;
     }
     write_data(0x02);
     wait_output_full();
     if (inb(DATA_PORT) != KBD_CMD_ACK) {
-        kout << "ps2: Failed to set scan code set 2\n";
+        kout << "ps2_keyboard: Failed to set scan code set 2" << endl;
         return false;
     }
 
     write_data(0xFF);
+
     wait_output_full();
-    uint8_t bat = inb(DATA_PORT);
-    if (bat != 0xAA) {
-        kout << "ps2: BAT failed: " << bat << "\n";
+    uint8_t ack = inb(DATA_PORT);
+    if (ack != KBD_CMD_ACK) {
+        kout << "ps2_keyboard: Reset cmd not ACKed, got: " << ack << "" << endl;
         return false;
     }
 
-    kout << "ps2: Keyboard initialized with Scan Code Set 2.\n";
+    wait_output_full();
+    uint8_t bat = inb(DATA_PORT);
+    if (bat != 0xAA) {
+        kout << "ps2_keyboard: BAT failed: " << bat << endl;
+        return false;
+    }
+
+    kout << "ps2_keyboard: BAT passed, keyboard ready." << endl;
+
+    kout << "ps2_keyboard: Successfully initialized PS/2 Keyboard with Scan Code Set 2." << endl;
     return true;
 }
 

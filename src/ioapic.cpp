@@ -32,14 +32,15 @@ void init(uint64_t phys_base) {
     uint8_t max_entries = ((ver >> 16) & 0xFF) + 1;
     uint8_t apic_id     = (read_reg(0x00) >> 24) & 0x0F;
 
-    kout << "ioapic: Initalized:" << endl;
-    kout << "ioapic:   Virt base=" << paging::IOAPIC_VIRT_BASE << ", Phys base=" << phys_base << endl;
-    kout << "ioapic:   ID=" << apic_id << ", Version=" << (ver & 0xFF) << ", Max Entries=" << max_entries << endl;
 
     for (uint8_t i = 0; i < max_entries; i++) {
         write_reg(RDT_LOW_BASE + 2 * i, MASK_BIT | (32 + i));
         write_reg(RDT_LOW_BASE + 2 * i + 1, 0);
     }
+
+    kout << "ioapic: IOAPIC Initalized:" << endl;
+    kout << "ioapic:   Virt base=" << paging::IOAPIC_VIRT_BASE << ", Phys base=" << phys_base << endl;
+    kout << "ioapic:   ID=" << apic_id << ", Version=" << (ver & 0xFF) << ", Max Entries=" << max_entries << endl;
 
     kout << "ioapic: Verifying IRQ1: Vector `";
     write_reg(0x10 + 2 * 1, 0x00000021);

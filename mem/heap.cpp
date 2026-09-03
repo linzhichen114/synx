@@ -59,9 +59,6 @@ static bool expand_heap(size_t size) {
 }
 
 void heapInit() {
-    if (!hhdm_request.response || !hhdm_request.response->offset)
-        kernel_panic("heap: HHDM not available");
-    kout << "heap: HHDM offset: " << hhdm_request.response->offset << endl;
     if (!expand_heap(INITIAL_HEAP_PAGES * PAGE_SIZE))
         kernel_panic("heap: Failed to allocate heap");
     kout << "heap: Heap was Sussessfully Initallized, size: "<< (uint32_t)(INITIAL_HEAP_PAGES * PAGE_SIZE) << endl;

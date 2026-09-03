@@ -1,5 +1,6 @@
 #include "kprint.h"
 #include "font.h"
+#include "apic/apic.h"
 #include <limine.h>
 #include <stddef.h>
 #include <string.h>
@@ -12,6 +13,9 @@ namespace kprint {
 ostreamk __kout(0x00FFFFFF, 0x00000000); 
 lock::SpinLock __kprint_lock;
 __kprint_locked __locked_kout;
+static KprintManipular_t manip_state = {
+    .base = 10
+};
 
 namespace {
     size_t cursor_x = 0;
@@ -46,23 +50,28 @@ void ostreamk::newline() {
 }
 
 void ostreamk::scroll() {
-    volatile uint32_t* fb = getframebuffer();
-    if (!fb) return;
+    auto* fb_resp = framebuffer_request.response;
+    if (!fb_resp || fb_resp->framebuffer_count == 0) return;
 
-    auto* fb_info = framebuffer_request.response->framebuffers[0];
-    size_t row_stride = fb_info->pitch / sizeof(uint32_t);
-    size_t line_height = FONT_HEIGHT;
-    size_t pixels_to_move = (max_rows - 1) * line_height * row_stride;
-    size_t pixels_in_one_line = line_height * row_stride;
-    const volatile uint32_t* src = fb + pixels_in_one_line;
-    volatile uint32_t* dst = fb;
-    
-    memcpy((void*)dst, (const void*)src, pixels_to_move);
+    auto* fb_info = fb_resp->framebuffers[0];
+    if (!fb_info || !fb_info->address) return;
 
-    volatile uint32_t* last_line = fb + (max_rows - 1) * line_height * row_stride;
-    for (size_t i = 0; i < pixels_in_one_line; ++i) {
-        last_line[i] = this->__get_bg();
+    uint8_t* fb = (uint8_t*)fb_info->address;
+    uint64_t pitch = fb_info->pitch;
+    uint64_t row_bytes = fb_info->width * sizeof(uint32_t);
+    uint64_t height = fb_info->height;
+    uint64_t font_row_bytes = FONT_HEIGHT * pitch;
+
+    if (height <= FONT_HEIGHT) return;
+
+    for (uint64_t y = 0; y < height - FONT_HEIGHT; y++) {
+        uint8_t* dst = fb + y * pitch;
+        uint8_t* src = fb + (y + FONT_HEIGHT) * pitch;
+        memcpy(dst, src, row_bytes);
     }
+
+    uint8_t* last_row = fb + (height - FONT_HEIGHT) * pitch;
+    memset(last_row, 0, font_row_bytes);
 }
 
 void ostreamk::drawChar(char c, size_t x, size_t y) {
@@ -128,7 +137,7 @@ void ostreamk::write(const uint8_t* str) {
 }
 
 void ostreamk::write(const char c) {
-    write(static_cast<const uint8_t>(c));
+    write((uint8_t)c);
 }
 
 void ostreamk::write(const char* str) {
@@ -153,9 +162,8 @@ void ostreamk::writeHex_uint16(uint16_t val) {
 
 
 namespace {
-    // 通用无符号整数转字符串 (支持任意进制)
     template<typename T>
-    void uint_to_str(T value, char* buf, int& len, int base = 10) {
+    void uint_to_str(T value, char* buf, int& len, uint8_t base = 10) {
         if (value == 0) {
             buf[0] = '0';
             len = 1;
@@ -165,10 +173,9 @@ namespace {
         int i = 0;
         while (value > 0) {
             uint8_t digit = value % base;
-            tmp[i++] = digit < 10 ? ('0' + digit) : ('A' + digit - 10);
+            tmp[i++] = digit < 10 ? ('0' + digit) : ('a' + digit - 10);
             value /= base;
         }
-        // 反转
         len = i;
         for (int j = 0; j < i; j++) {
             buf[j] = tmp[i - 1 - j];
@@ -180,7 +187,6 @@ namespace {
         uint64_t val = reinterpret_cast<uint64_t>(p);
         int num_len;
         uint_to_str(val, buf + 2, num_len, 16);
-        // 补齐前导零至 16 位
         while (num_len < 16) {
             buf[2 + num_len] = '0';
             num_len++;
@@ -190,6 +196,25 @@ namespace {
             buf[2 + i] = nibble < 10 ? ('0' + nibble) : ('a' + nibble - 10);
         }
         len = 18;
+    }
+
+    void print_padded_uint(uint64_t val, int width, char pad_char = '0') {
+        char buf[20];
+        int pos = 0;
+
+        if (val == 0) {
+            for (int i = 0; i < width - 1; ++i) __kout << pad_char;
+            __kout << '0';
+            return;
+        }
+
+        while (val > 0 && pos < 20) {
+            buf[pos++] = '0' + (val % 10); 
+            val /= 10;
+        }
+        for (int i = 0; i < width - pos; ++i) __kout << pad_char;
+
+        for (int i = pos - 1; i >= 0; --i) __kout << buf[i];
     }
 }
 
@@ -205,30 +230,38 @@ ostreamk::ostreamk(const ARGBColor_t frontground, const ARGBColor_t background)
 ostreamk::ostreamk(const uint32_t frontground, const uint32_t background)
     : fg(HexToARGB(frontground)), bg(HexToARGB(background)) {}
 
+ostreamk& operator<<(ostreamk& os, const bool b) {
+    if (b)
+        os.write("true");
+    else 
+        os.write("false");
+    return os;
+}
+
 ostreamk& operator<<(ostreamk& os, const uint8_t v) {
     char buf[4]; int len;
-    uint_to_str(v, buf, len);
+    uint_to_str(v, buf, len, manip_state.base);
     for (int i = 0; i < len; i++) os.write(buf[i]);
     return os;
 }
 
 ostreamk& operator<<(ostreamk& os, const uint16_t v) {
     char buf[6]; int len;
-    uint_to_str(v, buf, len);
+    uint_to_str(v, buf, len, manip_state.base);
     for (int i = 0; i < len; i++) os.write(buf[i]);
     return os;
 }
 
 ostreamk& operator<<(ostreamk& os, const uint32_t v) {
     char buf[11]; int len;
-    uint_to_str(v, buf, len);
+    uint_to_str(v, buf, len, manip_state.base);
     for (int i = 0; i < len; i++) os.write(buf[i]);
     return os;
 }
 
 ostreamk& operator<<(ostreamk& os, const uint64_t v) {
     char buf[21]; int len;
-    uint_to_str(v, buf, len);
+    uint_to_str(v, buf, len, manip_state.base);
     for (int i = 0; i < len; i++) os.write(buf[i]);
     return os;
 }
@@ -271,9 +304,21 @@ ostreamk& operator<<(ostreamk& os, const char* s) {
     return os;
 }
 
-
-ostreamk& ostreamk::__log_prefix() {
-    // TODO: Print timestamp
-    return *this;
+ostreamk& operator<<(ostreamk& os, const KprintManipular_t manip) {
+    manip_state = manip;
+    return os;
 }
+
+void ostreamk::__log_prefix() {
+    uint64_t us = apic::get_uptime_us();
+    uint64_t sec  = us / 1000000;
+    uint64_t frac = us % 1000000;
+    
+    kprint::__kout << "[ ";
+    print_padded_uint(sec, 4, ' ');
+    kprint::__kout << ".";
+    print_padded_uint(frac, 6);
+    kprint::__kout << "] ";
+}
+
 }

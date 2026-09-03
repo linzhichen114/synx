@@ -23,6 +23,7 @@ extern const uint64_t LAPIC_VIRT_BASE;
 extern const uint64_t IOAPIC_VIRT_BASE;
 extern page_table_t* pml4_base;
 
+void early_save_cr3(uint64_t pml4_phys);
 extern "C" void init();
 void map_page(uint64_t virt, uint64_t phys, uint64_t flags);
 
