@@ -90,8 +90,6 @@ void init() {
     write_reg(Reg::TPR, 0);
 
     base_info = info;
-    volatile uint32_t id_reg = apic_mmio_base[0x20 / 4]; // LAPIC ID Register
-    kout << "apic: LAPIC ID reg = " << id_reg << endl;
 }
 
 enum class TimerDivide : uint32_t {

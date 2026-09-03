@@ -17,6 +17,7 @@ extern "C" {
 #include "proc/ap_entry.h"
 #include "proc/sched.h"
 #include "apic/ioapic.h"
+#include "apic/madt.h"
 #include "apic/msr.h"
 #include "ps2_keyboard.h"
 
@@ -66,7 +67,13 @@ __attribute__((used, section(".limine_requests")))
 volatile struct limine_mp_request mp_request = {
     .id = LIMINE_MP_REQUEST_ID,
     .revision = 0,
-    .flags = 0 // 0 = xAPIC only; 1 = try x2APIC first
+    .flags = 0
+};
+
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_rsdp_request rsdp_request = {
+    .id = LIMINE_RSDP_REQUEST_ID,
+    .revision = 0
 };
 
 // Finally, define the start and end markers for the Limine requests.
@@ -91,7 +98,6 @@ static inline void __call_global_constructors() {
 }
 
 extern "C" void kernel_main(void) {
-
     // Ensure the bootloader actually understands our base revision (see spec).
     if (LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision) == false) 
         hcf();
@@ -112,7 +118,7 @@ extern "C" void kernel_main(void) {
     kout << "CR3 register saved." << endl;
 
     const auto fb0 = framebuffer_request.response->framebuffers[0];
-    kout << "fb0: Base " << (uint64_t*)fb0->address << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
+    kout << "fb0: Base " << hex << (uint64_t*)fb0->address << dec << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
     kout << "fb0: Mode " << fb0->width << "x" << fb0->height << " @ " << fb0->bpp << "bpp" << endl;
     kout << "fb0: Color mode: ARGB." << endl;
     kout << "fbcon: fb0 is primary device." << endl;
@@ -124,7 +130,7 @@ extern "C" void kernel_main(void) {
     kout << "Checking for HHDM: ";
     if (!hhdm_request.response || !hhdm_request.response->offset) {
         kout << "Not Available" << endl;
-        kernel_panic("heap: HHDM not available");
+        kernel_panic("HHDM not available");
     }
     kout << "Available, HHDM offset: " << hhdm_request.response->offset << endl;
 
@@ -147,15 +153,16 @@ extern "C" void kernel_main(void) {
     paging::init();
     heapInit();
 
-    if (!ps2::init()) {
+    if (!ps2::init())
         kernel_panic("Failed to initialize PS/2 keyboard.");
-    }
 
     asm volatile("cli");
-    apic::init();
-    kout << "apic: Initialized, Base: " << apic::get_base_info().mmio_base << endl;
 
-    ioapic::init(0xFEC00000ULL);
+    apic::init();
+
+    auto& info = madt::get_apic_info();
+    for (size_t i = 0; i < info.ioapic_count; i++)
+        ioapic::init(info.ioapics[i].phys_base);
     kout << "ioapic: Initialized, all IRQs masked." << endl;
 
     apic::timer_init(32, true, 0);

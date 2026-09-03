@@ -41,7 +41,7 @@ extern "C" void init() {
     }
 
     pml4_base = (page_table_t*)phys_to_virt(saved_pml4_phys);
-    kout << "paging: pml4_base = " << hex << (uint64_t)pml4_base << dec << endl;
+    kout << "paging: Initialized, pml4_base=0x" << hex << (uint64_t)pml4_base << dec << endl;
 }
 
 __attribute__((noinline))
