@@ -17,45 +17,40 @@ struct SdtHeader {
     uint32_t creator_revision;
 };
 
-__attribute__((packed))
 struct MadtHeader {
     SdtHeader sdt;
     uint32_t  local_apic_address;
     uint32_t  flags;
-};
+} __attribute__((packed));
 
-__attribute__((packed))
 struct MadtEntry {
     uint8_t type;
     uint8_t length;
-};
+} __attribute__((packed));
 
-__attribute__((packed))
 struct MadtLocalApic {
     MadtEntry header;
     uint8_t   acpi_proc_id;
     uint8_t   apic_id;
     uint32_t  flags;
-};
-__attribute__((packed))
+} __attribute__((packed));
+
 struct MadtIoApic {
     MadtEntry header;
     uint8_t   ioapic_id;
     uint8_t   reserved;
     uint32_t  ioapic_address;
     uint32_t  gsi_base;
-};
+} __attribute__((packed));
 
-__attribute__((packed))
 struct MadtIso {
     MadtEntry header;
     uint8_t   bus_source;
     uint8_t   irq_source;
     uint32_t  gsi;
     uint16_t  flags;
-};
+} __attribute__((packed));
 
-__attribute__((packed))
 struct RsdpDescriptor {
     char     signature[8];
     uint8_t  checksum;
@@ -68,7 +63,7 @@ struct RsdpDescriptor {
     uint64_t xsdt_address;
     uint8_t  extended_checksum;
     uint8_t  reserved[3];
-};
+} __attribute__((packed));
 
 struct ApicInfo {
     uint64_t lapic_phys_base;

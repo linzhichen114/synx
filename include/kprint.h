@@ -1,6 +1,7 @@
 #pragma once
 
 #include <stdint.h>
+#include <string.h>
 #include "proc/spinlock.h"
 
 
@@ -37,7 +38,6 @@ inline constexpr ARGBColor_t HexToARGB(uint32_t hex) {
     };
 }
 
-//todo: iomanip
 typedef struct
 {
     uint8_t base;
@@ -75,6 +75,14 @@ public:
     friend ostreamk& operator<<(ostreamk& os, const uint16_t* p);
     friend ostreamk& operator<<(ostreamk& os, const uint32_t* p);
     friend ostreamk& operator<<(ostreamk& os, const uint64_t* p);
+    friend ostreamk& operator<<(ostreamk& os, const int8_t    v);  
+    friend ostreamk& operator<<(ostreamk& os, const int16_t   v);  
+    friend ostreamk& operator<<(ostreamk& os, const int32_t   v);  
+    friend ostreamk& operator<<(ostreamk& os, const int64_t   v); 
+    friend ostreamk& operator<<(ostreamk& os, const int8_t*   p);
+    friend ostreamk& operator<<(ostreamk& os, const int16_t*  p);
+    friend ostreamk& operator<<(ostreamk& os, const int32_t*  p);
+    friend ostreamk& operator<<(ostreamk& os, const int64_t*  p);
     friend ostreamk& operator<<(ostreamk& os, const KprintManipular_t manip);
     
     uint32_t __get_fg() {
@@ -102,6 +110,18 @@ public:
             prefix_printed = true;
         }
         kprint::__kout << val;
+        return *this;
+    }
+
+    __kprint_locked& operator<<(const char* str) {
+        if (!prefix_printed) {
+            kprint::__kout.__log_prefix();
+            prefix_printed = true;
+        }
+        kprint::__kout << str;
+        if (str[strlen(str) - 1] == '\n') {
+            prefix_printed = false;
+        }
         return *this;
     }
 

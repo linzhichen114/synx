@@ -49,3 +49,19 @@ extern "C" inline void io_wait() {
 
 #define likely(x) __builtin_expect(!!(x), 1)
 #define unlikely(x) __builtin_expect(!!(x), 0)
+
+inline void atomic_inc(volatile int32_t* ptr) {
+    __atomic_fetch_add(ptr, 1, __ATOMIC_SEQ_CST);
+}
+    
+inline void atomic_dec(volatile int32_t* ptr) {
+    __atomic_fetch_sub(ptr, 1, __ATOMIC_SEQ_CST);
+}
+
+inline int32_t atomic_dec_and_test(volatile int32_t* ptr) {
+    return __atomic_sub_fetch(ptr, 1, __ATOMIC_SEQ_CST) == 0;
+}
+    
+inline int32_t atomic_load(volatile int32_t* ptr) {
+    return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
+}

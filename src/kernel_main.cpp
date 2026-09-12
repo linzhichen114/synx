@@ -11,7 +11,6 @@ extern "C" {
 #include "idt.h"
 #include "mem/kmemory.h"
 #include "mem/paging.h"
-#include "mem/heap.h"
 #include "mem/slab.h"
 #include "proc/ap_entry.h"
 #include "proc/sched.h"
@@ -21,6 +20,8 @@ extern "C" {
 #include "apic/madt.h"
 #include "apic/msr.h"
 #include "ps2_keyboard.h"
+#include "fs/vfs.h"
+#include "fs/ramfs.h"
 
 
 /* Constants Definetion */
@@ -133,10 +134,10 @@ extern "C" void kernel_main(void) {
         kout << "Not Available" << endl;
         kernel_panic("HHDM not available");
     }
-    kout << "Available, HHDM offset: " << hhdm_request.response->offset << endl;
+    kout << "Available, HHDM offset: 0x" << hex << hhdm_request.response->offset << dec << endl;
 
     kout << "Checking for LAPIC:" << endl;
-    kout << "  APIC_BASE MSR: " << apic_base_msr << endl;
+    kout << "  APIC_BASE MSR: 0x" << hex << apic_base_msr << dec << endl;
     kout << "  LAPIC Enabled? " << (lapic_enabled ? "yes" : "no") << endl;
 
     if (!lapic_enabled) {
@@ -152,7 +153,6 @@ extern "C" void kernel_main(void) {
 
     pmm::init();
     paging::init();
-    heapInit();
 
     if (!ps2::init())
         kernel_panic("Failed to initialize PS/2 keyboard.");
@@ -172,7 +172,7 @@ extern "C" void kernel_main(void) {
     kout << "ioapic: Initialized, all IRQs masked." << endl;
 
     apic::timer_init(32, true, 0);
-    kout << "apic: (Timer) Preemptive scheduling enabled." << endl;
+    kout << "apic: Preemptive scheduling enabled." << endl;
 
     kout << "smp: BSP Initialized Successfully, Starting SMP..." << endl;
 
@@ -187,15 +187,6 @@ extern "C" void kernel_main(void) {
     kout << "smp: Limine MP Response valid at " << (uint64_t*)resp << endl;
     kout << "smp: Detected " << cpu_count << " CPUs, BSP LAPIC ID: " 
         << resp->bsp_lapic_id << endl;
-    kout << "smp: Flags: " << resp->flags
-        << ((resp->flags & LIMINE_MP_RESPONSE_X86_64_X2APIC) ? " (x2APIC)" : " (xAPIC)")
-        << endl;
-
-    for (uint64_t i = 0; i < cpu_count; i++) {
-        auto* cpu = resp->cpus[i];
-        kout << "smp:   CPU " << i << " <proc_id=" << cpu->processor_id 
-            << ", lapic_id=" << cpu->lapic_id << ">" << endl;
-    }
 
     if (cpu_count <= 1) {
         kout << "smp: WARNING: Single core system, skipping SMP." << endl;
@@ -247,10 +238,56 @@ smp_skipping:
     __atomic_store_n(&scheduler_ready, true, __ATOMIC_RELEASE);
     kout << "scheduler: Scheduler ready." << endl;
 
-
+    // TEST //
     asm volatile("sti");
-    
+    kout << "vfs: Initializing root filesystem..." << endl;
+    vfs::SuperBlock* root_sb = ramfs::init();
+    if (!root_sb) {
+        kernel_panic("Failed to initialize RamFS!");
+    }
 
-    asm volatile ("sti; hlt; jmp .-2" ::: "memory");
-    //kernel_panic("kernel_main: others function is not implemented yet - system halting.");
+    long ret = vfs::mount(root_sb, "/");
+    if (ret != vfs::VFS_OK) {
+        kernel_panic("Failed to mount RamFS at /");
+    }
+
+    vfs::Dentry* root_dentry = vfs::path_walk("/");
+    if (!root_dentry) {
+        kernel_panic("Failed to resolve root dentry!");
+    }
+
+    vfs::Inode* etc_inode = ramfs::create_dir(root_dentry, "etc");
+    if (!etc_inode) kout << "WARNING: Failed to create /etc" << endl;
+
+    // 创建 /etc/hostname 文件
+    const char* hostname_data = "my-os\n";
+    vfs::Inode* host_inode = ramfs::create_file(
+        root_dentry->child,
+        "hostname", 
+        hostname_data, 
+        strlen(hostname_data)
+    );
+
+    const char* hello_data = "Hello from RamFS!\n";
+    ramfs::create_file(root_dentry, "hello.txt", hello_data, strlen(hello_data));
+
+    // ✅ 测试：通过 VFS 接口读取文件
+    vfs::File* f = vfs::open("/hello.txt", vfs::O_RDONLY);
+    if (f) {
+        char buf[64] = {0};
+        long bytes = vfs::read(f, buf, sizeof(buf));
+        kout << "vfs test: Read " << bytes << " bytes from /hello.txt: " << buf;
+        vfs::close(f);
+    } else {
+        kout << "vfs test: FAILED to open /hello.txt" << endl;
+    }
+
+    vfs::dput(root_dentry);
+    // END TEST //
+
+    
+    for (;;) {
+        scheduler::schedule();
+        asm volatile("sti; hlt" ::: "memory");
+    }
 }

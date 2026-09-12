@@ -36,6 +36,7 @@ struct ApicBaseInfo {
 };
 
 void init();
+void init_ap();
 ApicBaseInfo get_base_info();
 uint32_t read_reg(Reg reg);
 void write_reg(Reg reg, uint32_t val);
@@ -43,6 +44,7 @@ void send_eoi();
 
 void timer_init(uint8_t vector, bool periodic, uint32_t initial_count);
 void timer_oneshot(uint8_t vector, uint32_t initial_count);
+void timer_init_ap(uint8_t vector, bool periodic, uint32_t initial_count);
 
 bool cpu_has_apic();
 bool cpu_has_tsc_deadline();

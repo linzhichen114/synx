@@ -114,7 +114,6 @@ void* alloc(size_t size) {
 void free(void* ptr, size_t size) {
     if (!ptr) return;
 
-    bool is_slab_obj = false;
     if (size <= SLAB_SIZE_MAX && size > 0) {
         int idx = size_to_index(size);
         SlabHeader* slab = slab_caches[idx];

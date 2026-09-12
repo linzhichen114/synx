@@ -92,6 +92,20 @@ void init() {
     base_info = info;
 }
 
+void init_ap() {
+    uint64_t msr_val = msr::read(IA32_APIC_BASE_MSR);
+    msr_val |= APIC_BASE_ENABLE;
+    msr::write(IA32_APIC_BASE_MSR, msr_val);
+
+    ApicBaseInfo info = get_base_info();
+
+    write_reg(Reg::SPURIOUS_VEC, read_reg(Reg::SPURIOUS_VEC) | 0x1FF);
+
+    write_reg(Reg::TPR, 0);
+
+    base_info = info;
+}
+
 enum class TimerDivide : uint32_t {
     DIV_1   = 0x0B,
     DIV_2   = 0x00,
@@ -130,10 +144,28 @@ static uint32_t calibrate_timer() {
 }
 
 void timer_init(uint8_t vector, bool periodic, uint32_t initial_count) {
-    if (timer_ticks_per_ms == 0) {
+    if (timer_ticks_per_ms == 0)
         timer_ticks_per_ms = calibrate_timer();
-        kout << "apic: (Timer) Freq: " << timer_ticks_per_ms << " ticks/ms" << endl;
+
+    write_reg(Reg::TIMER_DIVIDE, static_cast<uint32_t>(TimerDivide::DIV_16));
+
+    uint32_t lvt_val = vector; 
+    if (periodic) {
+        lvt_val |= LVT_TIMER_PERIODIC;
     }
+    write_reg(Reg::LVT_TIMER, lvt_val);
+
+    if (periodic) {
+        timer_period_ticks = timer_ticks_per_ms * APIC_TIMER_TICK;
+        write_reg(Reg::TIMER_INIT_CNT, timer_ticks_per_ms * APIC_TIMER_TICK);
+    } else {
+        write_reg(Reg::TIMER_INIT_CNT, initial_count);
+    }
+}
+
+void timer_init_ap(uint8_t vector, bool periodic, uint32_t initial_count) {
+    if (timer_ticks_per_ms == 0) 
+        timer_ticks_per_ms = calibrate_timer();
 
     write_reg(Reg::TIMER_DIVIDE, static_cast<uint32_t>(TimerDivide::DIV_16));
 

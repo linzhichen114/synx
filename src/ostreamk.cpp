@@ -304,6 +304,62 @@ ostreamk& operator<<(ostreamk& os, const char* s) {
     return os;
 }
 
+ostreamk& operator<<(ostreamk& os, const int8_t v) {
+    char buf[4]; int len;
+    uint_to_str(v, buf, len, manip_state.base);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int16_t v) {
+    char buf[6]; int len;
+    uint_to_str(v, buf, len, manip_state.base);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int32_t v) {
+    char buf[11]; int len;
+    uint_to_str(v, buf, len, manip_state.base);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int64_t v) {
+    char buf[21]; int len;
+    uint_to_str(v, buf, len, manip_state.base);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int8_t* p) {
+    char buf[20]; int len;
+    ptr_to_str(p, buf, len);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int16_t* p) {
+    char buf[20]; int len;
+    ptr_to_str(p, buf, len);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int32_t* p) {
+    char buf[20]; int len;
+    ptr_to_str(p, buf, len);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
+ostreamk& operator<<(ostreamk& os, const int64_t* p) {
+    char buf[20]; int len;
+    ptr_to_str(p, buf, len);
+    for (int i = 0; i < len; i++) os.write(buf[i]);
+    return os;
+}
+
 ostreamk& operator<<(ostreamk& os, const KprintManipular_t manip) {
     manip_state = manip;
     return os;

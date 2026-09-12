@@ -17,19 +17,20 @@ extern "C" void ap_main(struct limine_mp_info* info) {
 
     gdt::init_ap(cpu_id, stack_top);
 
-    apic::init();
+    apic::init_ap();
 
     __atomic_fetch_add(&ap_online_count, 1, __ATOMIC_SEQ_CST);
 
-    kout << "smp: From <ap " << info->lapic_id << " @ cpu " << cpu_id << ">: Online, stack=" << (uint64_t*)stack_top << endl;
+    //kout << "smp: From <ap " << info->lapic_id << " @ cpu " << cpu_id << ">: Online, stack=" << (uint64_t*)stack_top << endl;
 
     while (!__atomic_load_n(&scheduler_ready, __ATOMIC_ACQUIRE))
         asm volatile("pause");
 
-    apic::timer_init(32, true, 0);
+    apic::timer_init_ap(32, true, 0);
+    scheduler::init();
     
-    // scheduler::init(scheduler::__idle, 4096, "idle", get_lapic_id());
-
-    for (;;)
+    for (;;) {
+        scheduler::schedule();
         asm volatile("sti; hlt" ::: "memory");
+    }
 }

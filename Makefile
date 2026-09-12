@@ -90,6 +90,11 @@ build/obj/proc/%.S.o: proc/%.S
 	@echo "  CXX     $<"
 	$(Q)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
 
+build/obj/fs/%.cpp.o: fs/%.cpp
+	@mkdir -p "$(dir $@)"
+	@echo "  CXX     $<"
+	$(Q)$(CXX) $(CXXFLAGS) $(CPPFLAGS) -c $< -o $@
+
 build/bin/symtab.txt: build/bin/sxImage_temp.elf
 	@echo "  NM      $<"
 	$(Q)nm -n --defined-only $< | grep -E ' [Tt] ' > $@
@@ -126,7 +131,7 @@ build/obj/build/bin/symtab_gen.o: build/bin/symtab_gen.cpp
 
 build/bin/$(OUTPUT): $(OTHER_OBJECTS) $(KALLSYMS_OBJ) build/obj/build/bin/symtab_gen.o SynxKernel-x86_64.lds
 	@mkdir -p "$(dir $@)"
-	@echo "  LD$@"
+	@echo "  LD      $@"
 	$(Q)$(LD) $(LDFLAGS) $(OTHER_OBJECTS) $(KALLSYMS_OBJ) build/obj/build/bin/symtab_gen.o -o $@
 
 

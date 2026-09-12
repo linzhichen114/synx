@@ -1,5 +1,5 @@
 #include "proc/sched.h"
-#include "mem/heap.h"
+#include "mem/slab.h"
 #include "mem/kmemory.h"
 #include "apic/apic.h"
 #include "kprint.h"
@@ -12,7 +12,7 @@ extern volatile struct limine_mp_request mp_request;
 namespace scheduler {
 
 PerCpuData per_cpu_data[MAX_CPUS];
-static bool initialized = false;
+bool initialized = false;
 static Task* task_list_head = nullptr;
 static uint64_t next_pid = 1;
 
@@ -29,12 +29,12 @@ void set_current_task(Task* t) {
 }
 
 Task* create_task(void (*entry_point)(), uint64_t stack_size) {
-    Task* new_task = (Task*)kmalloc(sizeof(Task));
+    Task* new_task = (Task*)slab::alloc(sizeof(Task));
     if (!new_task) return nullptr;
 
-    void* stack = kmalloc(stack_size);
+    void* stack = slab::alloc(stack_size);
     if (!stack) {
-        kfree(new_task);
+        slab::free(new_task, sizeof(Task));
         return nullptr;
     }
 
@@ -92,16 +92,22 @@ void init_all_cpus(void (*entry)(), uint64_t stack_size, const char* name) {
     if (initialized) return;
     initialized = true;
 
-    for (uint32_t cpu = 0; cpu < mp_request.response->cpu_count; cpu++) {
-        Task* task = create_task(entry, stack_size);
+    auto* resp = mp_request.response;
+    for (uint64_t i = 0; i < resp->cpu_count; i++) {
+        uint32_t lapic_id = resp->cpus[i]->lapic_id;
+        
+        if (lapic_id >= MAX_CPUS)
+            kernel_panic("scheduler: LAPIC ID exceeds MAX_CPUS");
 
-        if (!task) kernel_panic("scheduler: Failed to create task");
+        Task* task = create_task(entry, stack_size);
+        if (!task) kernel_panic("scheduler: Failed to create idle task");
 
         task->pid = 0;
         task->state = TaskState::RUNNING;
-        per_cpu_data[cpu].current_task = task;
-        per_cpu_data[cpu].cpu_id = cpu;
-        kout << "scheduler: <cpu " << cpu << "> task `" << name << "' created." << endl;
+        per_cpu_data[lapic_id].current_task = task;
+        per_cpu_data[lapic_id].cpu_id = lapic_id;
+        
+        kout << "scheduler: <cpu " << lapic_id << "> idle task created." << endl;
     }
 }
 
@@ -109,15 +115,15 @@ void init(void (*entry)(), uint64_t stack_size, const char* name, uint16_t proce
     if (initialized) return;
     initialized = true;
 
-        Task* task = create_task(entry, stack_size);
+    Task* task = create_task(entry, stack_size);
 
-        if (!task) kernel_panic("scheduler: Failed to create task");
+    if (!task) kernel_panic("scheduler: Failed to create task");
 
-        task->pid = 0;
-        task->state = TaskState::RUNNING;
-        per_cpu_data[processor_id].current_task = task;
-        per_cpu_data[processor_id].cpu_id = processor_id;
-        kout << "scheduler: <cpu " << processor_id << "> task `" << name << "' created." << endl;
+    task->pid = 0;
+    task->state = TaskState::RUNNING;
+    per_cpu_data[processor_id].current_task = task;
+    per_cpu_data[processor_id].cpu_id = processor_id;
+    kout << "scheduler: <cpu " << processor_id << "> task `" << name << "' created." << endl;
 }
 
 }
