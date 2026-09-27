@@ -1,9 +1,11 @@
 .SUFFIXES: 
 
-QEMUFLAGS  := -m 2G -chardev file,id=dbg,path=debugcon.log
+QEMUFLAGS  := -m 2G -d int,cpu_reset
 QEMUCORES  := 4
 override IMAGE_NAME := Synx-x86_64
 override OUTPUT := sxImage
+override INITRAMFS := build/bin/initramfs.cpio
+override INITRAMFS_DIR := assets/initramfs
 
 CXX       = g++
 LD        = ld
@@ -12,9 +14,7 @@ CXXFLAGS := -g -O2 -pipe
 CPPFLAGS :=
 LDFLAGS  :=
 QUIET     = 1
-DEBUG     = 
 GDB       =
-DEBUGCON  = 
 
 ifeq ($(shell ! $(CXX) --version 2>/dev/null | grep -q '^Target: '; echo $$?),1)
 	override CXX += -target x86_64-unknown-none-elf
@@ -24,15 +24,12 @@ ifneq ($(QUIET),)
 else
 	override Q=
 endif
-ifneq ($(DEBUG),)
-	override QEMUFLAGS += -d int,cpu_reset
-endif
 ifneq ($(GDB),)
 	override QEMUFLAGS += -s -S
 endif
 
 override CXXFLAGS += \
-	-Wall -Wextra -std=c++11 \
+	-Wall -Wextra -Wno-missing-field-initializers -std=c++11 \
 	-nodefaultlibs -nostartfiles -nostdlib -nostdinc -nostdinc++ \
 	-ffreestanding \
 	-fno-omit-frame-pointer -fno-stack-protector -fno-stack-check \
@@ -142,14 +139,22 @@ kernel: build/bin/$(OUTPUT)
 bootloader: 
 	$(Q)make -C assets/limine-bootloader all
 
-$(IMAGE_NAME).iso: kernel bootloader
+.PHONY: iso_root
+iso_root: $(INITRAMFS)
 	$(Q)mkdir -p build/iso_root/boot
 	$(Q)cp -v build/bin/$(OUTPUT) build/iso_root/boot/
+	$(Q)cp -v $(INITRAMFS) build/iso_root/boot/
 	$(Q)mkdir -p build/iso_root/boot/limine
 	$(Q)cp -v limine.conf assets/limine-bootloader/limine-bios.sys assets/limine-bootloader/limine-bios-cd.bin assets/limine-bootloader/limine-uefi-cd.bin build/iso_root/boot/limine/
 	$(Q)mkdir -p build/iso_root/EFI/BOOT
 	$(Q)cp -v assets/limine-bootloader/BOOTX64.EFI build/iso_root/EFI/BOOT/
 	$(Q)cp -v assets/limine-bootloader/BOOTIA32.EFI build/iso_root/EFI/BOOT/
+	#$(Q)cp -vr assets/userspace build/iso_root/
+
+$(INITRAMFS):
+	$(Q)make -C $(INITRAMFS_DIR) all
+
+$(IMAGE_NAME).iso: kernel iso_root bootloader $(INITRAMFS)
 	@echo "XORRISO $(IMAGE_NAME).iso"
 	$(Q)xorriso -as mkisofs -R -r -J -b boot/limine/limine-bios-cd.bin \
 		-no-emul-boot -boot-load-size 4 -boot-info-table -hfsplus \
@@ -163,6 +168,7 @@ all: $(IMAGE_NAME).iso
 
 .PHONY: run
 run: all
+	@echo "  QEMU    $(IMAGE_NAME).iso"
 	$(Q)qemu-system-x86_64 \
 		-M q35 \
 		-cdrom $(IMAGE_NAME).iso \
@@ -173,5 +179,6 @@ run: all
 
 .PHONY: clean
 clean:
-	rm -rf build Synx-x86_64.iso
-	make -C assets/limine-bootloader clean
+	rm -rf build $(IMAGE_NAME).iso
+	$(Q)make -C assets/limine-bootloader clean
+	$(Q)make -C $(INITRAMFS_DIR) clean

@@ -62,5 +62,5 @@ extern "C" __attribute__((noinline)) void kernel_panic(const char* message) {
 
     kout << endl << "--- [ end Kernel panic ] ---" << endl;
 
-    hcf();
+    asm volatile ("cli; hlt; jmp .-2");
 }

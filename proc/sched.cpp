@@ -107,7 +107,7 @@ void init_all_cpus(void (*entry)(), uint64_t stack_size, const char* name) {
         per_cpu_data[lapic_id].current_task = task;
         per_cpu_data[lapic_id].cpu_id = lapic_id;
         
-        kout << "scheduler: <cpu " << lapic_id << "> idle task created." << endl;
+        kout << "scheduler: <cpu " << lapic_id << "> " << name << " task created." << endl;
     }
 }
 

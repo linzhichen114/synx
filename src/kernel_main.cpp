@@ -22,6 +22,7 @@ extern "C" {
 #include "ps2_keyboard.h"
 #include "fs/vfs.h"
 #include "fs/ramfs.h"
+#include "fs/initramfs.h"
 
 
 /* Constants Definetion */
@@ -30,7 +31,7 @@ extern uint64_t PER_CPU_DATA_SIZE;
 extern uint64_t PER_CPU_GP_OFFSET;
 
 extern "C" void ap_entry(struct limine_mp_info*);
-const uint8_t AP_STACK_SIZE = (16 * 1024);
+const uint32_t AP_STACK_SIZE = (16 * 1024);
 uint64_t AP_TIMEOUT = 100000000ULL;
 bool scheduler_ready = false;
 
@@ -78,6 +79,12 @@ volatile struct limine_rsdp_request rsdp_request = {
     .revision = 0
 };
 
+__attribute__((used, section(".limine_requests")))
+volatile struct limine_module_request module_request = {
+    .id = LIMINE_MODULE_REQUEST_ID,
+    .revision = 0
+};
+
 // Finally, define the start and end markers for the Limine requests.
 // These can also be moved anywhere, to any .cpp file, as seen fit.
 
@@ -97,6 +104,48 @@ static inline void __call_global_constructors() {
     for (init_func_t* func = __init_array_start; func != __init_array_end; ++func)
         if (*func)
             (*func)();
+}
+
+static inline void init_fs() {
+    vfs::SuperBlock* root_sb = ramfs::init();
+    if (!root_sb) {
+        kout << "FATAL: Failed to init ramfs!\n";
+        while(1) asm("hlt");
+    }
+    
+    long err = vfs::mount(root_sb, "/");
+    if (err != vfs::VFS_OK) {
+        kout << "FATAL: Failed to mount root fs! Error: " << err << "\n";
+        while(1) asm("hlt");
+    }
+    kout << "vfs: Root filesystem mounted successfully.\n";
+
+    auto* mod_resp = module_request.response;
+    if (mod_resp && mod_resp->module_count > 0) {
+        struct limine_file* initrd_mod = module_request.response->modules[0];
+
+        if (!initrd_mod) {
+            kout << "WARNING: No initrd module found in bootloader response.\n";
+            return;
+        }
+        
+        kout << "initramfs: Loading from '" << initrd_mod->path 
+             << "' (" << initrd_mod->size << " bytes)...\n";
+        
+        long loaded = initramfs_load(
+            (const uint8_t*)initrd_mod->address, 
+            initrd_mod->size
+        );
+        
+        if (loaded < 0) {
+            kout << "ERROR: initramfs parsing failed!\n";
+        }
+    } else {
+        kout << "WARNING: Bootloader returned no modules.\n";
+    }
+    
+    // ...
+    kout << "initramfs: Root filesystem initialized successfully.\n";
 }
 
 extern "C" void kernel_main(void) {
@@ -153,6 +202,7 @@ extern "C" void kernel_main(void) {
 
     pmm::init();
     paging::init();
+    slab::init();
 
     if (!ps2::init())
         kernel_panic("Failed to initialize PS/2 keyboard.");
@@ -237,53 +287,10 @@ smp_skipping:
     scheduler::init_all_cpus();
     __atomic_store_n(&scheduler_ready, true, __ATOMIC_RELEASE);
     kout << "scheduler: Scheduler ready." << endl;
-
-    // TEST //
     asm volatile("sti");
-    kout << "vfs: Initializing root filesystem..." << endl;
-    vfs::SuperBlock* root_sb = ramfs::init();
-    if (!root_sb) {
-        kernel_panic("Failed to initialize RamFS!");
-    }
 
-    long ret = vfs::mount(root_sb, "/");
-    if (ret != vfs::VFS_OK) {
-        kernel_panic("Failed to mount RamFS at /");
-    }
-
-    vfs::Dentry* root_dentry = vfs::path_walk("/");
-    if (!root_dentry) {
-        kernel_panic("Failed to resolve root dentry!");
-    }
-
-    vfs::Inode* etc_inode = ramfs::create_dir(root_dentry, "etc");
-    if (!etc_inode) kout << "WARNING: Failed to create /etc" << endl;
-
-    // 创建 /etc/hostname 文件
-    const char* hostname_data = "my-os\n";
-    vfs::Inode* host_inode = ramfs::create_file(
-        root_dentry->child,
-        "hostname", 
-        hostname_data, 
-        strlen(hostname_data)
-    );
-
-    const char* hello_data = "Hello from RamFS!\n";
-    ramfs::create_file(root_dentry, "hello.txt", hello_data, strlen(hello_data));
-
-    // ✅ 测试：通过 VFS 接口读取文件
-    vfs::File* f = vfs::open("/hello.txt", vfs::O_RDONLY);
-    if (f) {
-        char buf[64] = {0};
-        long bytes = vfs::read(f, buf, sizeof(buf));
-        kout << "vfs test: Read " << bytes << " bytes from /hello.txt: " << buf;
-        vfs::close(f);
-    } else {
-        kout << "vfs test: FAILED to open /hello.txt" << endl;
-    }
-
-    vfs::dput(root_dentry);
-    // END TEST //
+    kout << "Initializing root filesystem." << endl;
+    init_fs();
 
     
     for (;;) {

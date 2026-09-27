@@ -129,14 +129,16 @@ vfs::SuperBlock* init() {
 }
 
 vfs::Inode* create_file(vfs::Dentry* parent_dir, const char* name, const void* data, size_t size) {
-    if (!parent_dir || parent_dir->inode->type != vfs::FileType::Directory) return nullptr;
+    if (!parent_dir || !parent_dir->inode || parent_dir->inode->type != vfs::FileType::Directory) {
+        kout << "ramfs::create_file: invalid parent_dir" << endl;
+        return nullptr;
+    }
     
     vfs::Inode* inode = alloc_inode(vfs::FileType::Regular);
     if (!inode) return nullptr;
     
     inode->size = size;
 
-    // 拷贝文件数据到内存
     InodeData* priv = (InodeData*)inode->private_data;
     if (size > 0) {
         priv->buffer = (uint8_t*)slab::alloc(size);
@@ -150,7 +152,10 @@ vfs::Inode* create_file(vfs::Dentry* parent_dir, const char* name, const void* d
     }
     
     vfs::Dentry* d = vfs::d_alloc(name, inode, parent_dir);
-    if (!d) {
+    
+    volatile vfs::Dentry* vd = d;
+    if (!vd) {
+        kout << "ramfs::create_file: d_alloc returned nullptr!" << endl;
         if (priv->buffer) slab::free(priv->buffer, priv->capacity);
         slab::free(priv, sizeof(InodeData));
         slab::free(inode, sizeof(vfs::Inode));

@@ -199,7 +199,7 @@ __attribute__((naked)) void isr_entry() {
         "pushq %r14\n"
         "pushq %r15\n"
         "movq %rsp, %rdi\n"
-        "movq 120(%rsp), %rsi\n"
+        "movq 128(%rsp), %rsi\n"
         "call exceptionHandler\n"
         "popq %r15\n"
         "popq %r14\n"

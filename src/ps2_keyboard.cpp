@@ -24,7 +24,6 @@ static bool s_shift     = false;
 static bool s_ctrl      = false;
 static bool s_alt       = false;
 static bool s_caps_lock = false;
-static bool s_e0_prefix = false;
 
 static constexpr size_t KEY_BUF_SIZE = 64;
 static KeyEvent s_key_buf[KEY_BUF_SIZE];
@@ -52,18 +51,6 @@ static void write_cmd(uint8_t cmd) {
 static void write_data(uint8_t data) {
     wait_input_clear();
     outb(DATA_PORT, data);
-}
-
-static bool kbd_send_cmd(uint8_t cmd) {
-    int retries = 3;
-    while (retries--) {
-        write_data(cmd);
-        wait_output_full();
-        uint8_t resp = inb(DATA_PORT);
-        if (resp == KBD_CMD_ACK) return true;
-        if (resp != KBD_CMD_RESEND) break;
-    }
-    return false;
 }
 
 static const char sc2_ascii[] = {

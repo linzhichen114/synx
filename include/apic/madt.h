@@ -4,7 +4,6 @@
 
 namespace madt {
 
-__attribute__((packed))
 struct SdtHeader {
     char     signature[4];
     uint32_t length;
@@ -15,7 +14,7 @@ struct SdtHeader {
     uint32_t oem_revision;
     uint32_t creator_id;
     uint32_t creator_revision;
-};
+}__attribute__((packed));
 
 struct MadtHeader {
     SdtHeader sdt;

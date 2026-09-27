@@ -3,6 +3,7 @@
 #include "sysdef.h"
 #include "kprint.h"
 #include <string.h>
+#include "fs/vfs.h"
 
 
 namespace slab {
@@ -68,7 +69,11 @@ void init() {
             kernel_panic("slab: Failed to create initial cache");
         }
     }
-    kout << "slab: Slab Allocateor initialized successfully" << endl;
+    for (int i = 0; i < NUM_SLAB_CACHES; i++) {
+        kout << "  cache[" << i << "] obj_size=" << index_to_size(i) 
+            << " total_objs=" << slab_caches[i]->total_objs << endl;
+    }
+    kout << "slab: Slab Allocateor initialized successfully" << endl;//hcf();
 }
 
 void* alloc(size_t size) {
@@ -95,6 +100,17 @@ void* alloc(size_t size) {
     while (slab) {
         if (slab->free_count > 0) {
             void* obj = slab->free_list;
+            
+            uint8_t* slab_start = (uint8_t*)slab + sizeof(SlabHeader);
+            uint8_t* slab_end = slab_start + slab->total_objs * slab->obj_size;
+            if ((uint8_t*)obj < slab_start || (uint8_t*)obj >= slab_end) {
+                kout << "slab: CORRUPTION: cache[" << idx 
+                     << "] free_list=" << hex << obj << dec
+                     << " out of range [" << hex << (void*)slab_start 
+                     << ", " << (void*)slab_end << "]" << endl;
+                kernel_panic("slab: corrupted free list");
+            }
+            
             slab->free_list = *(void**)obj;
             slab->free_count--;
             return obj;
@@ -106,6 +122,7 @@ void* alloc(size_t size) {
     if (!slab) return nullptr;
 
     void* obj = slab->free_list;
+    
     slab->free_list = *(void**)obj;
     slab->free_count--;
     return obj;
@@ -121,6 +138,15 @@ void free(void* ptr, size_t size) {
             uint8_t* slab_start = (uint8_t*)slab;
             size_t slab_total = sizeof(SlabHeader) + slab->total_objs * slab->obj_size;
             if ((uint8_t*)ptr >= slab_start && (uint8_t*)ptr < slab_start + slab_total) {
+                void* cur = slab->free_list;
+                while (cur) {
+                    if (cur == ptr) {
+                        kout << "slab: Double Free detected at " << hex << ptr << dec << endl;
+                        kernel_panic("slab: double free");
+                    }
+                    cur = *(void**)cur;
+                }
+                
                 *(void**)ptr = slab->free_list;
                 slab->free_list = ptr;
                 slab->free_count++;
@@ -128,6 +154,10 @@ void free(void* ptr, size_t size) {
             }
             slab = slab->next;
         }
+
+        kout << "slab: Invalid Free: ptr=0x" << hex << ptr << dec 
+             << ", size=" << size << " - not found in any slab" << endl;
+        kernel_panic("slab: invalid free");
     }
 
     uint64_t virt = (uint64_t)ptr;

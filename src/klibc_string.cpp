@@ -79,15 +79,60 @@ extern "C" char* strchr(const char* str, uint16_t c) {
         // 如果当前字符匹配目标字符
         if (*str == (char)c)
             return (char *)str;
-        str++; // 移动指针到下一个字符
+        str++;
     }
     
-    // 检查是否正在查找结束符 '\0'
     if ((char)c == '\0')
         return (char *)str;
     
     // 未找到
     return nullptr;
+}
+
+extern "C" char* strrchr(const char* str, uint16_t c) {
+    if (str == nullptr) {
+        return nullptr;
+    }
+
+    const char* last_occurrence = nullptr;
+    
+    while (*str != '\0') {
+        if (*str == (char)c) {
+            last_occurrence = str; 
+        }
+        str++;
+    }
+
+    if ((char)c == '\0') {
+        return (char*)str; 
+    }
+
+    return (char*)last_occurrence;
+}
+
+extern "C" char* strstr(const char* haystack, const char* needle) {
+    if (*needle == '\0') {
+        return (char*)haystack;
+    }
+
+    while (*haystack != '\0') {
+        const char* h = haystack;
+        const char* n = needle;
+
+        while (*h == *n && *n != '\0') {
+            h++;
+            n++;
+        }
+
+        if (*n == '\0') {
+            return (char*)haystack;
+        }
+
+        haystack++;
+    }
+
+    return nullptr;
+;
 }
 
 extern "C" uint8_t strcmp(const char *s1, const char *s2) {

@@ -16,6 +16,7 @@ constexpr long VFS_ERR_INVAL   = -22;  // Invalid argument
 constexpr uint32_t O_RDONLY = 0x00;
 constexpr uint32_t O_WRONLY = 0x01;
 constexpr uint32_t O_RDWR   = 0x02;
+constexpr uint32_t O_EXCL   = 0x08;
 constexpr uint32_t O_CREAT  = 0x40;
 constexpr uint32_t O_TRUNC  = 0x200;
 constexpr uint32_t O_APPEND = 0x400;
@@ -96,6 +97,7 @@ struct Mount {
 };
 
 Dentry* d_alloc(const char* name, Inode* inode, Dentry* parent);
+Dentry* d_lookup(Dentry* parent, const char* name);
 long mount(SuperBlock* sb, const char* mount_point);
 Dentry* path_walk(const char* path);
 File* open(const char* path, uint32_t flags);
