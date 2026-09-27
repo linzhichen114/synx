@@ -11,7 +11,7 @@ Synx is a freestanding x86_64 kernel booted with the Limine protocol. The kernel
 - `make run` builds the ISO if needed and starts it in QEMU.
 - `make clean` removes `build/`, the ISO, and generated Limine/initramfs outputs. Do not run it unless cleanup is part of the task.
 
-There is no dedicated test target. For kernel changes, build with `make kernel`; when boot behavior matters and the required host tools are available, validate with `make run`.
+The root Makefile has no test target. Run the dynamic-linker host test with `make -C tests test`. For kernel changes, build with `make kernel`; when boot behavior matters and the required host tools are available, validate with `make run`.
 
 The build expects a GNU-compatible C++ compiler and linker, `objcopy`, `nm`, `awk`, `cpio`, `xorriso`, and (for running) `qemu-system-x86_64`. The build uses host tools directly; no dependency installer or package manifest is maintained here.
 

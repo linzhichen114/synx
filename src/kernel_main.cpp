@@ -23,6 +23,7 @@ extern "C" {
 #include "fs/vfs.h"
 #include "fs/ramfs.h"
 #include "fs/initramfs.h"
+#include "proc/elf_exec.h"
 
 
 /* Constants Definetion */
@@ -110,38 +111,34 @@ static inline void init_fs() {
     vfs::SuperBlock* root_sb = ramfs::init();
     if (!root_sb) {
         kout << "FATAL: Failed to init ramfs!\n";
-        while(1) asm("hlt");
+        kernel_panic("vfs: Failed to initialize root filesystem.");
     }
     
     long err = vfs::mount(root_sb, "/");
     if (err != vfs::VFS_OK) {
         kout << "FATAL: Failed to mount root fs! Error: " << err << "\n";
-        while(1) asm("hlt");
+        kernel_panic("vfs: Failed to mount root filesystem.");
     }
     kout << "vfs: Root filesystem mounted successfully.\n";
 
     auto* mod_resp = module_request.response;
-    if (mod_resp && mod_resp->module_count > 0) {
-        struct limine_file* initrd_mod = module_request.response->modules[0];
-
+    if (!mod_resp || mod_resp->module_count == 0) {
+        kout << "WARNING: No initrd module found in bootloader response.\n";
+        return;
+    }
+    kout << "initramfs: Found " << mod_resp->module_count << " module(s).\n";
+    for (size_t i = 0; i < mod_resp->module_count; i++) {
+        struct limine_file* initrd_mod = mod_resp->modules[i];
         if (!initrd_mod) {
-            kout << "WARNING: No initrd module found in bootloader response.\n";
-            return;
+            kout << "WARNING: Null initrd module at index " << i << ".\n";
+            continue;
         }
-        
-        kout << "initramfs: Loading from '" << initrd_mod->path 
+
+        kout << "initramfs: [" << i << "] Loading from '" << initrd_mod->path
              << "' (" << initrd_mod->size << " bytes)...\n";
-        
-        long loaded = initramfs_load(
-            (const uint8_t*)initrd_mod->address, 
-            initrd_mod->size
-        );
-        
-        if (loaded < 0) {
-            kout << "ERROR: initramfs parsing failed!\n";
-        }
-    } else {
-        kout << "WARNING: Bootloader returned no modules.\n";
+        long loaded = initramfs_load((const uint8_t*)initrd_mod->address,
+                                     initrd_mod->size);
+        if (loaded < 0) kernel_panic("initramfs parsing failed.");
     }
     
     // ...
@@ -162,11 +159,6 @@ extern "C" void kernel_main(void) {
     kout << KERNEL_NAME << " version " << KERNEL_VERSION << " (" << COMPILER_NAME << " " << COMPILER_VERSION << ") SMP " << BUILD_DATE << " " << BUILD_TIME << endl;
 
     kout << "All constructors called successfully." << endl;
-
-    uint64_t cr3;
-    asm volatile("mov %%cr3, %0" : "=r"(cr3));
-    paging::early_save_cr3(cr3 & ~0xFFF);
-    kout << "CR3 register saved." << endl;
 
     const auto fb0 = framebuffer_request.response->framebuffers[0];
     kout << "fb0: Base " << hex << (uint64_t*)fb0->address << dec << ", Size " << (fb0->width * fb0->height * fb0->bpp) / (uint64_t)(8 * 1024) << endl;
@@ -289,12 +281,11 @@ smp_skipping:
     kout << "scheduler: Scheduler ready." << endl;
     asm volatile("sti");
 
-    kout << "Initializing root filesystem." << endl;
     init_fs();
 
-    
-    for (;;) {
-        scheduler::schedule();
-        asm volatile("sti; hlt" ::: "memory");
-    }
+    kout << "elf: launching /sbin/init in ring 3." << endl;
+    int launch_error = elf_exec::launch_static("/sbin/init");
+    kout << "elf: failed to launch /sbin/init, error=" << launch_error << endl;
+    kernel_panic("failed to launch static user ELF");
+
 }

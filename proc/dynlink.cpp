@@ -190,7 +190,9 @@ static int apply_relocations(const uint8_t* image, uint64_t image_base,
                        !options->resolve_symbol(name, &symbol_address, options->context)) {
                 if ((symbol.info >> 4) != STB_WEAK) return UnresolvedSymbol;
             }
-            value = symbol_address + (uint64_t)relocation.addend;
+            value = type == R_X86_64_64
+                ? symbol_address + (uint64_t)relocation.addend
+                : symbol_address;
         } else {
             return UnsupportedRelocation;
         }

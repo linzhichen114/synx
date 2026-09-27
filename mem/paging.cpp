@@ -19,28 +19,13 @@ namespace paging {
 page_table_t* pml4_base = nullptr;
 const uint64_t LAPIC_VIRT_BASE = 0xFFFFFFFF80100000ULL;
 const uint64_t IOAPIC_VIRT_BASE = 0xFFFFFFFF80200000ULL;
-static uint64_t saved_pml4_phys = 0;
-
-
-void early_save_cr3(uint64_t pml4_phys) {
-    saved_pml4_phys = pml4_phys;
-}
 
 extern "C" void init() {
     uint64_t current_cr3;
     asm volatile("mov %%cr3, %0" : "=r"(current_cr3));
     uint64_t current_pml4_phys = current_cr3 & ~0xFFF;
 
-    if (saved_pml4_phys == 0) {
-        kout << "paging: WARNING: early_save_cr3 not called, using current CR3" << endl;
-        saved_pml4_phys = current_pml4_phys;
-    } else if (current_pml4_phys != saved_pml4_phys) {
-        kout << "paging: CR3 changed! boot=" << hex << saved_pml4_phys
-             << " current=" << current_pml4_phys << dec << endl;
-        saved_pml4_phys = current_pml4_phys;
-    }
-
-    pml4_base = (page_table_t*)phys_to_virt(saved_pml4_phys);
+    pml4_base = (page_table_t*)phys_to_virt(current_pml4_phys);
     kout << "paging: Initialized, pml4_base=0x" << hex << (uint64_t)pml4_base << dec << endl;
 }
 

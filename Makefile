@@ -49,7 +49,7 @@ override LDFLAGS += \
 	--gc-sections \
 	-T SynxKernel-x86_64.lds
 
-override CXXFILES    := $(wildcard */*.cpp)
+override CXXFILES    := $(filter-out tests/%, $(wildcard */*.cpp))
 override ASFILES     := $(wildcard */*.S)
 override CXXOBJECTS  := $(patsubst %.cpp, build/obj/%.cpp.o, $(CXXFILES))
 override ASOBJECTS   := $(patsubst %.S, build/obj/%.S.o, $(ASFILES))
@@ -139,6 +139,10 @@ kernel: build/bin/$(OUTPUT)
 bootloader: 
 	$(Q)make -C assets/limine-bootloader all
 
+.PHONY: userspace
+userspace:
+	$(Q)make -C assets/userspace all
+
 .PHONY: iso_root
 iso_root: $(INITRAMFS)
 	$(Q)mkdir -p build/iso_root/boot
@@ -151,7 +155,7 @@ iso_root: $(INITRAMFS)
 	$(Q)cp -v assets/limine-bootloader/BOOTIA32.EFI build/iso_root/EFI/BOOT/
 	#$(Q)cp -vr assets/userspace build/iso_root/
 
-$(INITRAMFS):
+$(INITRAMFS): userspace
 	$(Q)make -C $(INITRAMFS_DIR) all
 
 $(IMAGE_NAME).iso: kernel iso_root bootloader $(INITRAMFS)

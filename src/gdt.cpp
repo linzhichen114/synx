@@ -17,6 +17,13 @@ void setup_descriptors(uint32_t cpu_id, uint64_t stack_top) {
     memset(&cpu.tss, 0, sizeof(TSSEntry));
     cpu.tss.rsp0 = stack_top;
     cpu.tss.iopbBase = sizeof(TSSEntry);
+    cpu.syscall_kernel_rsp = stack_top;
+    cpu.syscall_user_rsp = 0;
+
+    static_assert(__builtin_offsetof(PerCpuData, syscall_kernel_rsp) == 192,
+                  "syscall entry kernel stack offset changed");
+    static_assert(__builtin_offsetof(PerCpuData, syscall_user_rsp) == 200,
+                  "syscall entry user stack offset changed");
 
     // ---- GDT[0]: Null Descriptor ----
     memset(&cpu.gdt[0], 0, sizeof(GDTEntry));
@@ -62,8 +69,8 @@ void setup_descriptors(uint32_t cpu_id, uint64_t stack_top) {
     cpu.gdt[5].base_low    = tss_base & 0xFFFF;
     cpu.gdt[5].base_middle = (tss_base >> 16) & 0xFF;
     cpu.gdt[5].access      = 0x89; // P=1, DPL=0, S=0, Type=Available 64-bit TSS
-    cpu.gdt[5].granularity = ((limit >> 16) & 0x0F) | (((tss_base >> 24) & 0xFF) << 4);
-    cpu.gdt[5].base_high   = 0;    // REVERSED
+    cpu.gdt[5].granularity = (limit >> 16) & 0x0F;
+    cpu.gdt[5].base_high   = (tss_base >> 24) & 0xFF;
 
     // GDT[6], TSS base[63:32]
     cpu.gdt[6].limit_low   = (tss_base >> 32) & 0xFFFF;

@@ -39,6 +39,8 @@ struct PerCpuData {
     GDTEntry gdt[7];
     GDTPtr   gp;
     TSSEntry tss;
+    uint64_t syscall_kernel_rsp;
+    uint64_t syscall_user_rsp;
 };
 
 void setup_descriptors(uint32_t cpu_id, uint64_t stack_top);

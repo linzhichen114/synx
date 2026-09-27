@@ -83,11 +83,11 @@ SECTIONS
         *(COMMON)
     } :data
 
-    /* Define a 16KB kernel stack */
-    . = ALIGN(16);
-    _kernel_stack_bottom = .;
-    . += 16384; /* 16KB */
-    _kernel_stack_top = .;
+    .kernel_stack (NOLOAD) : ALIGN(16) {
+        _kernel_stack_bottom = .;
+        . += 16384;
+        _kernel_stack_top = .;
+    } :data
 
     /* Discard .note.* and .eh_frame* since they may cause issues on some hosts. */
     /DISCARD/ : {

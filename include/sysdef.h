@@ -65,3 +65,13 @@ inline int32_t atomic_dec_and_test(volatile int32_t* ptr) {
 inline int32_t atomic_load(volatile int32_t* ptr) {
     return __atomic_load_n(ptr, __ATOMIC_SEQ_CST);
 }
+
+inline void debugcon_mark(char marker) {
+    asm volatile("outb %0, $0xE9" :: "a"(marker));
+}
+
+inline void debugcon_hex(uint64_t value) {
+    static const char digits[] = "0123456789abcdef";
+    debugcon_mark(digits[(value >> 4) & 0xF]);
+    debugcon_mark(digits[value & 0xF]);
+}
