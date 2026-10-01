@@ -25,6 +25,6 @@ struct RegisterFrame {
 };
 
 void init();
-extern "C" uint64_t syscall_dispatch(const RegisterFrame* frame);
+extern "C" uint64_t syscall_dispatch(RegisterFrame* frame);
 
 }

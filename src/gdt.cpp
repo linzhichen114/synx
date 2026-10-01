@@ -44,20 +44,22 @@ void setup_descriptors(uint32_t cpu_id, uint64_t stack_top) {
     cpu.gdt[2].granularity = 0xCF; // G=1, D/B=1, Limit[19:16]=0xF
     cpu.gdt[2].base_high   = 0;
 
-    // ---- GDT[3]: Ring 3 Code (64-bit) ----
+    // SYSRETQ derives SS as STAR[63:48] + 8 and CS as STAR[63:48] + 16,
+    // so the user data descriptor must precede the user code descriptor.
+    // ---- GDT[3]: Ring 3 Data ----
     cpu.gdt[3].limit_low   = 0xFFFF;
     cpu.gdt[3].base_low    = 0;
     cpu.gdt[3].base_middle = 0;
-    cpu.gdt[3].access      = 0xFA; // P=1, DPL=3, S=1, Type=Execute/Read
-    cpu.gdt[3].granularity = 0xAF;
+    cpu.gdt[3].access      = 0xF2; // P=1, DPL=3, S=1, Type=Read/Write
+    cpu.gdt[3].granularity = 0xCF;
     cpu.gdt[3].base_high   = 0;
 
-    // ---- GDT[4]: Ring 3 Data ----
+    // ---- GDT[4]: Ring 3 Code (64-bit) ----
     cpu.gdt[4].limit_low   = 0xFFFF;
     cpu.gdt[4].base_low    = 0;
     cpu.gdt[4].base_middle = 0;
-    cpu.gdt[4].access      = 0xF2; // P=1, DPL=3, S=1, Type=Read/Write
-    cpu.gdt[4].granularity = 0xCF;
+    cpu.gdt[4].access      = 0xFA; // P=1, DPL=3, S=1, Type=Execute/Read
+    cpu.gdt[4].granularity = 0xAF;
     cpu.gdt[4].base_high   = 0;
 
     // ---- GDT[5..6]: TSS Descriptor (16 bytes, occupies 2 slots) ----

@@ -27,15 +27,6 @@ syscall_entry:
 	movq %gs:200, %rax
 	movq %rax, 136(%rsp)
 
-	movq %rcx, 152(%rsp)
-	movq $0x1b, 160(%rsp)
-	movq %r11, %rax
-	andq $-489217, %rax
-	orq $2, %rax
-	movq %rax, 168(%rsp)
-	movq %rax, 176(%rsp)
-	movq $0x23, 184(%rsp)
-
 	movq %rsp, %rdi
 	call syscall_dispatch
 	movq %rax, 0(%rsp)
@@ -52,9 +43,16 @@ syscall_entry:
 	movq  96(%rsp), %r13
 	movq 104(%rsp), %r14
 	movq 112(%rsp), %r15
-	movq   0(%rsp), %rax
-	leaq 152(%rsp), %rsp
+	movq 120(%rsp), %rcx
+	movq 128(%rsp), %r11
+	movq 0(%rsp), %rax
+	movq 136(%rsp), %rsp
+	/*
+	 * Restore the user GS base before returning with sysretq. The CPU uses
+	 * RCX for the user RIP, R11 for user RFLAGS, and the current RSP as the
+	 * user stack pointer.
+	 */
 	swapgs
-	iretq
+	sysretq
 
 .size syscall_entry, .-syscall_entry

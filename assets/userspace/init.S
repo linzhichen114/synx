@@ -15,6 +15,29 @@ _start:
 	cmp $1, %rax
 	jne fail
 
+	mov $186, %eax
+	syscall
+	cmp $1, %rax
+	jne fail
+
+	mov $228, %eax
+	mov $1, %edi
+	lea monotonic_time(%rip), %rsi
+	syscall
+	test %rax, %rax
+	jne fail
+	cmpq $1000000000, monotonic_time+8(%rip)
+	jae fail
+
+	mov $229, %eax
+	mov $1, %edi
+	lea clock_resolution(%rip), %rsi
+	syscall
+	test %rax, %rax
+	jne fail
+	cmpq $0, clock_resolution+8(%rip)
+	jle fail
+
 	mov $63, %eax
 	lea uts_name(%rip), %rdi
 	syscall
@@ -100,10 +123,10 @@ _start:
 	test %rax, %rax
 	jne fail
 
-	xor %eax, %eax
+	mov $19, %eax
 	mov %r12, %rdi
-	lea hostname_data(%rip), %rsi
-	mov $64, %edx
+	lea hostname_iov(%rip), %rsi
+	mov $1, %edx
 	syscall
 	test %rax, %rax
 	jle fail
@@ -176,9 +199,20 @@ _start:
 	cmp $18, %rax
 	jne fail
 
-	mov $60, %eax
-	xor %edi, %edi
+	mov $20, %eax
+	mov $1, %edi
+	lea output_iov(%rip), %rsi
+	mov $2, %edx
 	syscall
+	cmp $(vector_message_end - vector_message), %rax
+	jne fail
+
+	mov $59, %eax
+	lea exec_path(%rip), %rdi
+	lea exec_argv(%rip), %rsi
+	lea exec_envp(%rip), %rdx
+	syscall
+	jmp fail
 
 fail:
 	mov $60, %eax
@@ -203,9 +237,39 @@ root_path:
 	.asciz "/"
 etc_path:
 	.asciz "/etc"
+exec_path:
+	.asciz "/sbin/exec-test"
+exec_argv:
+	.quad exec_argv0, exec_argv1, 0
+exec_argv0:
+	.asciz "exec-test"
+exec_argv1:
+	.asciz "arg"
+exec_envp:
+	.quad exec_env
+	.quad 0
+exec_env:
+	.asciz "SYNX_EXEC=works"
+hostname_iov:
+	.quad hostname_data
+	.quad 64
+output_iov:
+	.quad vector_message
+	.quad vector_message_mid - vector_message
+	.quad vector_message_mid
+	.quad vector_message_end - vector_message_mid
+vector_message:
+	.ascii "readv/writev/clock syscall smoke test: "
+vector_message_mid:
+	.ascii "ok\n"
+vector_message_end:
 
 .section .bss
 .balign 8
+monotonic_time:
+	.skip 16
+clock_resolution:
+	.skip 16
 uts_name:
 	.skip 390
 hostname_data:
@@ -216,5 +280,8 @@ cwd_data:
 	.skip 256
 dir_data:
 	.skip 256
+
+.section .note.GNU-stack,"",@progbits
+
 
 .section .note.GNU-stack,"",@progbits

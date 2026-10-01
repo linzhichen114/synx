@@ -2,10 +2,10 @@
 .type enter_user, @function
 
 enter_user:
-	pushq $0x23
-	pushq %rsi
-	pushq $0x2
 	pushq $0x1b
+	pushq %rsi
+	pushq $0x202
+	pushq $0x23
 	pushq %rdi
 	iretq
 
